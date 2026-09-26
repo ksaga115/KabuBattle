@@ -1,5 +1,9 @@
 node_modules/
 dist/
+
+# 流用元 BarcodeTool.html の取得キャッシュ（vendor/BarcodeTool.commit の固定値から再取得できる）
+vendor/cache/
+
 .DS_Store
 Thumbs.db
 *.log

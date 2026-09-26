@@ -1,0 +1,7 @@
+# 対戦エンジン（CB）の流用元。設計書 §0.1 のとおり BarcodeTool 側が原本で、
+# ここに固定したコミットから BarcodeTool.html を取得して CB を抽出する。
+# 更新するときは手で commit と sha256 を進める（scripts/build-kabu.mjs --update が新しい値を表示する）。
+repo=ksaga115/BarcodeTool
+commit=79da6202d2c11b2ce808b011795a066df15b5c62
+file=BarcodeTool.html
+sha256=5403bb1fce0da07f1dc1977f76b7df91ae905b61cfe4a3db4b457db0dbf9566c

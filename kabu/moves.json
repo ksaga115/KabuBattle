@@ -1,0 +1,859 @@
+{
+ "schemaVersion": 1,
+ "updatedAt": "2026-09-26",
+ "note": "技データ。sector は 33 業種で共通の業種技（1 本目・自分の属性）、stocks は銘柄ごとの固有技 2 つと必殺技。kind は設計書 §6.2 の語彙で書き、今のエンジンが効かせられない kind は src/kabu-core.js の KIND_FALLBACK が近い挙動に落とす。origin は図鑑に出る元ネタの一言。reviewed:false は初版（あなたが直したら true にする）。",
+
+ "sector": {
+  "水産・農林業":       { "name": "水揚げ",         "kind": "multi",  "pow": 0.58, "min": 2, "max": 3, "text": "獲れた分だけ何度も叩きつける" },
+  "鉱業":               { "name": "露天掘り",       "kind": "pierce", "pow": 0.95, "pierce": 0.14, "text": "地面ごと削って守りを無視する" },
+  "建設業":             { "name": "地鎮",           "kind": "shield", "cut": 0.12, "turns": 2, "text": "足場を組んで受けを固める" },
+  "食料品":             { "name": "日配",           "kind": "regen",  "rate": 0.05, "text": "毎日届くものが少しずつ効く" },
+  "繊維製品":           { "name": "織り込み",       "kind": "stack",  "pow": 0.72, "add": 5, "cap": 4, "text": "重ねるほど厚くなる" },
+  "パルプ・紙":         { "name": "抄紙",           "kind": "multi",  "pow": 0.55, "min": 2, "max": 4, "text": "薄いものを何枚も重ねて断つ" },
+  "化学":               { "name": "触媒",           "kind": "stack",  "pow": 0.70, "add": 7, "cap": 4, "text": "反応が進むほど威力が増す" },
+  "医薬品":             { "name": "投与",           "kind": "dot",    "rate": 0.05, "turns": 3, "text": "効いてくるのは後からだ" },
+  "石油・石炭製品":     { "name": "精製",           "kind": "drain",  "pow": 0.88, "drain": 0.35, "text": "燃やした分を自分の力に変える" },
+  "ゴム製品":           { "name": "グリップ",       "kind": "counter","pow": 0.95, "text": "踏ん張って受け、そのまま返す" },
+  "ガラス・土石製品":   { "name": "焼成",           "kind": "crit",   "pow": 0.90, "critAdd": 0.09, "text": "焼き固めた一点で砕く" },
+  "鉄鋼":               { "name": "高炉",           "kind": "delay",  "pow": 2.20, "turns": 1, "text": "火入れに時間がかかるが、出たものは重い" },
+  "非鉄金属":           { "name": "伸線",           "kind": "pierce", "pow": 0.95, "pierce": 0.16, "text": "細く長く延ばして貫く" },
+  "金属製品":           { "name": "打ち抜き",       "kind": "strike", "pow": 1.00, "text": "型どおりに、きっちり抜く" },
+  "機械":               { "name": "駆動",           "kind": "first",  "pow": 0.90, "text": "動き出したら止まらない。次は先に出る" },
+  "電気機器":           { "name": "歩留まり改善",   "kind": "stack",  "pow": 0.72, "add": 6, "cap": 4, "text": "作るほど精度が上がる" },
+  "輸送用機器":         { "name": "量産ライン",     "kind": "multi",  "pow": 0.60, "min": 2, "max": 3, "text": "同じ品質のものを大量に叩き出す" },
+  "精密機器":           { "name": "微調整",         "kind": "sure",   "pow": 0.85, "text": "外さない。ただし派手さもない" },
+  "その他製品":         { "name": "定番商品",       "kind": "crit",   "pow": 0.90, "critAdd": 0.09, "text": "刺さる時はとことん刺さる" },
+  "電気・ガス業":       { "name": "基幹負荷",       "kind": "shield", "cut": 0.14, "turns": 3, "text": "止まらないことが強さ" },
+  "陸運業":             { "name": "ダイヤ",         "kind": "first",  "pow": 0.88, "text": "定刻どおり、必ず先に着く" },
+  "海運業":             { "name": "大量輸送",       "kind": "gamble", "maxMult": 2.4, "text": "市況次第。当たれば大きい" },
+  "空運業":             { "name": "急上昇",         "kind": "first",  "pow": 0.92, "text": "一気に高度を取る" },
+  "倉庫・運輸関連業":   { "name": "在庫回転",       "kind": "stack",  "pow": 0.68, "add": 6, "cap": 4, "text": "回せば回すほど積み上がる" },
+  "情報・通信業":       { "name": "回線増強",       "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "細い線を束にして押し通す" },
+  "卸売業":             { "name": "商流",           "kind": "drain",  "pow": 0.86, "drain": 0.35, "text": "間に立って、通るたびに抜く" },
+  "小売業":             { "name": "棚替え",         "kind": "debuff", "stat": "DEF", "cut": 0.18, "turns": 2, "text": "並べ替えて相手の守りを崩す" },
+  "銀行業":             { "name": "与信",           "kind": "shield", "cut": 0.13, "turns": 2, "text": "貸す前に、まず守りを固める" },
+  "証券、商品先物取引業": { "name": "建玉",         "kind": "gamble", "maxMult": 2.6, "text": "張った分だけ跳ねる。外せば何も起きない" },
+  "保険業":             { "name": "再保険",         "kind": "reflect","ratio": 0.30, "text": "受けた損害の一部を相手に回す" },
+  "その他金融業":       { "name": "レバレッジ",     "kind": "stack",  "pow": 0.74, "add": 8, "cap": 3, "text": "効かせるほど振れが大きくなる" },
+  "不動産業":           { "name": "含み益",         "kind": "shield", "cut": 0.15, "turns": 3, "text": "帳簿に出ない厚みがある" },
+  "サービス業":         { "name": "人繰り",         "kind": "heal",   "rate": 0.16, "text": "手を止めて立て直す" }
+ },
+
+ "stocks": {
+  "2914": { "moves": [
+    { "name": "加熱式へ",     "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "切り替えるたびに積み上がる", "origin": "紙巻から加熱式たばこへの転換を進めている" },
+    { "name": "海外ブランド", "kind": "drain",  "pow": 0.88, "drain": 0.35, "text": "外で稼いだ分を吸い上げる", "origin": "買収したブランドで海外売上が国内を上回る" }],
+    "ultimate": { "name": "配当性向",  "kind": "heal", "rate": 0.30, "text": "手を止めて大きく立て直す", "origin": "高配当で知られる株主還元姿勢", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "3382": { "moves": [
+    { "name": "二十四時間", "kind": "regen", "rate": 0.05, "text": "毎ターン少しずつ戻る", "origin": "年中無休のコンビニ網が稼ぎ頭" },
+    { "name": "ドミナント", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "同じ地域に何度も出す", "origin": "地域を絞って集中出店する戦略" }],
+    "ultimate": { "name": "北米転換", "kind": "delay", "pow": 2.5, "turns": 1, "text": "溜めてから大きく動く", "origin": "北米コンビニ事業への集中と構造再編", "unlock": ["awaken", "earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "4063": { "moves": [
+    { "name": "シリコンウエハー", "kind": "pierce", "pow": 0.96, "pierce": 0.18, "text": "土台ごと貫く", "origin": "半導体ウエハーで世界首位" },
+    { "name": "塩ビ",             "kind": "stack",  "pow": 0.72, "add": 7, "cap": 4, "text": "地味だが積み上がる", "origin": "塩化ビニル樹脂でも世界最大手" }],
+    "ultimate": { "name": "フォトレジスト", "kind": "sure", "pow": 1.30, "text": "外さない精密な一撃", "origin": "露光工程に欠かせない感光材", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4502": { "moves": [
+    { "name": "グローバル開発", "kind": "dot",   "rate": 0.06, "turns": 3, "text": "効いてくるのは後から", "origin": "海外大型買収で世界規模の開発体制へ" },
+    { "name": "消化器領域",     "kind": "drain", "pow": 0.88, "drain": 0.35, "text": "奪った分だけ回復する", "origin": "消化器・希少疾患を重点領域に据える" }],
+    "ultimate": { "name": "パテントクリフ", "kind": "gamble", "maxMult": 2.6, "text": "崖の上か下か、出てみないと分からない", "origin": "主力薬の特許切れが業績を大きく揺らす", "unlock": ["earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "4568": { "moves": [
+    { "name": "抗体薬物複合体", "kind": "pierce", "pow": 0.98, "pierce": 0.18, "text": "狙った細胞だけを貫く", "origin": "ADC（抗体薬物複合体）が成長の柱" },
+    { "name": "適応拡大",       "kind": "stack",  "pow": 0.72, "add": 7, "cap": 4, "text": "使える場面が増えるほど強くなる", "origin": "同じ薬の対象疾患を広げていく" }],
+    "ultimate": { "name": "エンハーツ", "kind": "delay", "pow": 2.7, "turns": 1, "text": "一拍おいて決定打", "origin": "世界的に伸びた主力の抗がん剤", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6098": { "moves": [
+    { "name": "マッチング", "kind": "first", "pow": 0.90, "text": "先に見つけた方が勝つ", "origin": "人と仕事を結びつける事業が源流" },
+    { "name": "インディード", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "世界中から何度も引き当てる", "origin": "買収した求人検索サイトが世界最大級に" }],
+    "ultimate": { "name": "HRテクノロジー", "kind": "swap", "text": "相手の攻めと守りを入れ替える", "origin": "採用の仕組みそのものを置き換える", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "6367": { "moves": [
+    { "name": "インバーター", "kind": "stack", "pow": 0.72, "add": 7, "cap": 4, "text": "回転を上げるほど効く", "origin": "省エネ空調を支える可変速制御" },
+    { "name": "世界空調",     "kind": "multi", "pow": 0.60, "min": 2, "max": 3, "text": "どの気候にも同じものを届ける", "origin": "空調で世界首位級のシェア" }],
+    "ultimate": { "name": "冷媒転換", "kind": "delay", "pow": 2.5, "turns": 1, "text": "溜めて一気に入れ替える", "origin": "環境規制に合わせた低GWP冷媒の開発", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6501": { "moves": [
+    { "name": "ルマーダ",   "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "つなぐほど賢くなる", "origin": "現場データを収益に変えるデジタル事業" },
+    { "name": "社会インフラ", "kind": "shield", "cut": 0.14, "turns": 3, "text": "止まらないことが強さ", "origin": "鉄道・電力など社会基盤を担う" }],
+    "ultimate": { "name": "選択と集中", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "上場子会社の再編で事業構成を組み替えた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6503": { "moves": [
+    { "name": "FA機器",   "kind": "first",  "pow": 0.90, "text": "工場の動きを先に取る", "origin": "工場自動化機器が収益の柱" },
+    { "name": "パワー半導体", "kind": "pierce", "pow": 0.95, "pierce": 0.16, "text": "大電流で押し通す", "origin": "鉄道・車載向けパワー半導体に強い" }],
+    "ultimate": { "name": "重電の底力", "kind": "delay", "pow": 2.4, "turns": 1, "text": "重いものは遅れて効く", "origin": "発電・送配電を手がける重電の系譜", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "6758": { "moves": [
+    { "name": "CMOSセンサー", "kind": "pierce", "pow": 0.97, "pierce": 0.18, "text": "見えないところまで見抜いて撃つ", "origin": "スマホ向け画像センサーで世界首位" },
+    { "name": "IP展開",       "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "同じ作品が媒体を変えるたび積み上がる", "origin": "ゲーム・音楽・アニメを横断する知財戦略" }],
+    "ultimate": { "name": "プレイステーション", "kind": "delay", "pow": 2.7, "turns": 1, "text": "世代交代のたび、溜めて撃つ", "origin": "据置ゲーム機の世代サイクルが業績を動かす", "unlock": ["awaken", "limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6857": { "moves": [
+    { "name": "テスタ",     "kind": "sure",   "pow": 0.88, "text": "必ず見つける。見逃さない", "origin": "半導体の出荷前検査装置で世界首位級" },
+    { "name": "並列測定",   "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "同時に何個も当たる", "origin": "多数のチップを一度に測る技術" }],
+    "ultimate": { "name": "AI半導体特需", "kind": "gamble", "maxMult": 2.8, "text": "波が来た時だけ、とてつもない", "origin": "AI向け半導体の増産局面で業績が跳ねる", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "6861": { "moves": [
+    { "name": "直販",       "kind": "sure",   "pow": 0.92, "text": "間に誰も入れない。必ず届く", "origin": "代理店を通さない直接販売が高収益の源" },
+    { "name": "当日出荷",   "kind": "first",  "pow": 0.92, "text": "とにかく速い。次も先手", "origin": "在庫を持ち即日届ける体制" }],
+    "ultimate": { "name": "営業利益率五割", "kind": "pierce", "pow": 1.50, "pierce": 0.30, "text": "守りの意味をなくす", "origin": "製造業として異例の高い営業利益率", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7011": { "moves": [
+    { "name": "防衛",       "kind": "shield", "cut": 0.16, "turns": 3, "text": "守ることそのものが仕事", "origin": "防衛装備の主要メーカー" },
+    { "name": "ガスタービン", "kind": "stack", "pow": 0.74, "add": 7, "cap": 4, "text": "回り始めると止まらない", "origin": "火力発電の中核設備で世界的地位" }],
+    "ultimate": { "name": "原子力再稼働", "kind": "delay", "pow": 2.6, "turns": 1, "text": "長い準備のあとに大きく動く", "origin": "原子力関連設備を長く手がけてきた", "unlock": ["awaken", "earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "7203": { "moves": [
+    { "name": "ジャストインタイム", "kind": "first", "pow": 0.90, "text": "必要な物を必要な時に。次のターンは必ず先手", "origin": "トヨタ生産方式の柱のひとつ" },
+    { "name": "カイゼン",           "kind": "stack", "pow": 0.80, "add": 6, "cap": 4, "text": "使うたび攻が積み上がる", "origin": "現場の小さな改善を積み重ねる文化" }],
+    "ultimate": { "name": "全固体電池", "kind": "delay", "pow": 2.6, "turns": 1, "text": "1 ターン溜めて大爆発", "origin": "次世代電池の本命として開発中", "unlock": ["awaken", "limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7267": { "moves": [
+    { "name": "二輪世界一", "kind": "multi", "pow": 0.60, "min": 2, "max": 4, "text": "軽いものを数で押す", "origin": "オートバイの世界販売台数で首位" },
+    { "name": "エンジン屋", "kind": "crit",  "pow": 0.92, "critAdd": 0.10, "text": "回しきった時に一発入る", "origin": "自らエンジンを作ることにこだわり続けた" }],
+    "ultimate": { "name": "F1の記憶", "kind": "gamble", "maxMult": 2.6, "text": "回しきるか、壊れるか", "origin": "モータースポーツ最高峰での挑戦の歴史", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "7741": { "moves": [
+    { "name": "EUVマスクブランクス", "kind": "pierce", "pow": 0.98, "pierce": 0.20, "text": "最先端の一点を貫く", "origin": "最先端露光に使う原版で圧倒的シェア" },
+    { "name": "眼内レンズ",           "kind": "heal",   "rate": 0.16, "text": "手を止めて視界を取り戻す", "origin": "白内障治療用の眼内レンズで世界的地位" }],
+    "ultimate": { "name": "高収益体質", "kind": "sure", "pow": 1.35, "text": "外さない。それが強さ", "origin": "小さな寡占領域を選んで高い利益率を保つ", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7974": { "moves": [
+    { "name": "枯れた技術の水平思考", "kind": "sure",  "pow": 0.90, "text": "新しくない道具で、誰も見ない角度から当てる", "origin": "横井軍平が語ったとされる開発哲学" },
+    { "name": "IPの強さ",             "kind": "stack", "pow": 0.76, "add": 8, "cap": 4, "text": "同じキャラが出るたびに積み上がる", "origin": "マリオ・ゼルダ・ポケモンを自社で抱える" }],
+    "ultimate": { "name": "新ハード発売", "kind": "delay", "pow": 2.8, "turns": 1, "text": "出るまで静か、出たら全部ひっくり返る", "origin": "ハード世代の切り替わりで業績が一変する", "unlock": ["awaken", "limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8001": { "moves": [
+    { "name": "非資源",     "kind": "shield", "cut": 0.14, "turns": 3, "text": "市況に振られない厚み", "origin": "資源に頼らない収益構成が強み" },
+    { "name": "ファミリーマート", "kind": "regen", "rate": 0.05, "text": "毎日少しずつ入ってくる", "origin": "コンビニを完全子会社化して取り込んだ" }],
+    "ultimate": { "name": "商社の目利き", "kind": "gamble", "maxMult": 2.5, "text": "見立てが当たれば大きい", "origin": "事業投資の目利きで稼ぐ商社の本業", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "8031": { "moves": [
+    { "name": "鉄鉱石",     "kind": "pierce", "pow": 0.96, "pierce": 0.16, "text": "重いものが守りを押しつぶす", "origin": "豪州の鉄鉱石権益が収益の柱" },
+    { "name": "LNG",        "kind": "drain",  "pow": 0.88, "drain": 0.35, "text": "燃やして自分を満たす", "origin": "液化天然ガスの権益を世界各地に持つ" }],
+    "ultimate": { "name": "資源価格", "kind": "gamble", "maxMult": 2.7, "text": "市況次第。読めないが大きい", "origin": "資源価格の上下がそのまま業績に出る", "unlock": ["limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8035": { "moves": [
+    { "name": "コータ・デベロッパ", "kind": "sure",   "pow": 0.90, "text": "塗って現す。工程は外さない", "origin": "レジスト塗布・現像装置で世界シェア首位" },
+    { "name": "エッチング",         "kind": "pierce", "pow": 0.97, "pierce": 0.18, "text": "削って形にする", "origin": "回路を削り出すエッチング装置に強い" }],
+    "ultimate": { "name": "設備投資サイクル", "kind": "gamble", "maxMult": 2.8, "text": "波の上にいる時だけ、けた違い", "origin": "半導体メーカーの投資増減に業績が連動する", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "8058": { "moves": [
+    { "name": "総合力",   "kind": "multi",  "pow": 0.60, "min": 2, "max": 4, "text": "あらゆる方角から当てる", "origin": "資源から食品まで扱う総合商社の最大手" },
+    { "name": "ローソン", "kind": "regen",  "pow": 0.0, "rate": 0.05, "text": "毎日少しずつ戻る", "origin": "コンビニ事業に共同で出資している" }],
+    "ultimate": { "name": "自社株買い", "kind": "heal", "rate": 0.30, "text": "身を縮めて立て直す", "origin": "大規模な自社株買いで株主還元を進めた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8306": { "moves": [
+    { "name": "メガバンク", "kind": "shield", "cut": 0.15, "turns": 3, "text": "厚みだけで耐える", "origin": "国内最大の銀行グループ" },
+    { "name": "海外貸出",   "kind": "drain",  "pow": 0.88, "drain": 0.35, "text": "外で貸して、利ざやを取る", "origin": "アジアを中心に海外展開を広げた" }],
+    "ultimate": { "name": "金利上昇", "kind": "stack", "pow": 0.80, "add": 9, "cap": 4, "text": "上がるほど効いてくる", "origin": "金利の正常化が銀行の利ざやを押し上げる", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "8316": { "moves": [
+    { "name": "効率経営", "kind": "first",  "pow": 0.90, "text": "決めるのが速い", "origin": "メガバンクの中で経費率の低さを掲げる" },
+    { "name": "カード事業", "kind": "regen", "rate": 0.05, "text": "使われるたび少し戻る", "origin": "クレジットカード・決済で稼ぐ" }],
+    "ultimate": { "name": "利ざや改善", "kind": "stack", "pow": 0.80, "add": 9, "cap": 4, "text": "上がるほど積み上がる", "origin": "金利環境の変化が本業利益に直結する", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8411": { "moves": [
+    { "name": "一体運営", "kind": "shield", "cut": 0.14, "turns": 3, "text": "銀行・信託・証券をまとめて構える", "origin": "銀行と信託と証券を一体で運営する体制" },
+    { "name": "法人基盤", "kind": "drain",  "pow": 0.86, "drain": 0.35, "text": "取引のたびに少し抜く", "origin": "大企業取引に厚い顧客基盤" }],
+    "ultimate": { "name": "システム刷新", "kind": "delay", "pow": 2.4, "turns": 1, "text": "長い時間をかけて、ようやく動く", "origin": "巨大な勘定系システムの統合に長い年月をかけた", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "8729": { "moves": [
+    { "name": "生保・損保", "kind": "reflect", "ratio": 0.30, "text": "受けた分を返す", "origin": "生命保険と損害保険を束ねる金融グループ" },
+    { "name": "ネット直販", "kind": "first",   "pow": 0.88, "text": "間を抜いて速く届く", "origin": "対面に頼らない販売チャネルを持つ" }],
+    "ultimate": { "name": "資産運用", "kind": "gamble", "maxMult": 2.4, "text": "相場次第で大きく振れる", "origin": "保険料を運用して収益を上げる", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8766": { "moves": [
+    { "name": "再保険",   "kind": "reflect", "ratio": 0.32, "text": "受けた損害を外に流す", "origin": "巨大リスクを再保険で分散する" },
+    { "name": "海外損保", "kind": "drain",   "pow": 0.88, "drain": 0.35, "text": "外で受けて、自分を満たす", "origin": "海外保険会社の買収で収益源を広げた" }],
+    "ultimate": { "name": "巨大災害", "kind": "counter", "pow": 1.40, "text": "受けきってから反撃する", "origin": "災害の年は払い、その後に料率が上がる", "unlock": ["earnings", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "9432": { "moves": [
+    { "name": "光回線",     "kind": "shield", "cut": 0.15, "turns": 3, "text": "太い線がそのまま守りになる", "origin": "全国に張り巡らせた固定通信網" },
+    { "name": "IOWN",       "kind": "delay",  "pow": 2.4, "turns": 1, "text": "先の構想が、後から効く", "origin": "光を中心に据えた次世代通信基盤の構想" }],
+    "ultimate": { "name": "ユニバーサルサービス", "kind": "regen", "rate": 0.07, "text": "誰にでも届き続ける", "origin": "全国どこでも通信を提供する責務を負う", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9433": { "moves": [
+    { "name": "au経済圏",   "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "囲うほど積み上がる", "origin": "通信に決済・金融・電力を束ねた経済圏" },
+    { "name": "基地局",     "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "面で押す", "origin": "全国に展開した無線基地局網" }],
+    "ultimate": { "name": "増配継続", "kind": "heal", "rate": 0.28, "text": "淡々と立て直す", "origin": "長期にわたる連続増配で知られる", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9434": { "moves": [
+    { "name": "PayPay",   "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "小さな決済を数で押す", "origin": "グループのスマホ決済が国内最大級に育った" },
+    { "name": "法人DX",   "kind": "stack", "pow": 0.72, "add": 6, "cap": 4, "text": "導入が進むほど効く", "origin": "企業向けのデジタル化支援を伸ばしている" }],
+    "ultimate": { "name": "高配当", "kind": "heal", "rate": 0.28, "text": "配って立て直す", "origin": "配当利回りの高さで個人投資家に人気", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9983": { "moves": [
+    { "name": "SPA",        "kind": "stack", "pow": 0.74, "add": 7, "cap": 4, "text": "企画から売り場まで自分でやる", "origin": "企画・製造・小売を一体で行う業態" },
+    { "name": "ヒートテック", "kind": "shield", "cut": 0.14, "turns": 3, "text": "着込んで耐える", "origin": "機能性肌着が定番商品として定着した" }],
+    "ultimate": { "name": "アジア出店", "kind": "multi", "pow": 0.66, "min": 3, "max": 4, "text": "次々と出していく", "origin": "海外、とくにアジアでの出店が成長の柱", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9984": { "moves": [
+    { "name": "群戦略",     "kind": "multi",  "pow": 0.60, "min": 2, "max": 4, "text": "たくさん抱えて、当たったものが効く", "origin": "多数の企業に出資して群として伸ばす考え方" },
+    { "name": "Arm",        "kind": "pierce", "pow": 0.97, "pierce": 0.18, "text": "土台の設計そのものを押さえる", "origin": "半導体設計を手がける子会社を保有する" }],
+    "ultimate": { "name": "含み損益", "kind": "gamble", "maxMult": 3.0, "text": "その日次第。とんでもなく振れる", "origin": "保有株の評価損益で最終損益が大きく振れる", "unlock": ["limitUp", "earnings", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "1925": { "moves": [
+    { "name": "戸建",   "kind": "multi",  "pow": 0.58, "min": 2, "max": 3, "text": "同じ規格で数を建てる", "origin": "工業化住宅を全国で供給してきた" },
+    { "name": "賃貸管理", "kind": "regen", "rate": 0.05, "text": "毎月少しずつ入る", "origin": "賃貸住宅の管理で安定収益を得る" }],
+    "ultimate": { "name": "物流施設", "kind": "delay", "pow": 2.4, "turns": 1, "text": "大きい箱は、建ってから効く", "origin": "大型物流施設の開発が成長分野", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "1928": { "moves": [
+    { "name": "シャーウッド", "kind": "shield", "cut": 0.14, "turns": 3, "text": "木の骨組みで受ける", "origin": "木造住宅のブランドを長く育ててきた" },
+    { "name": "海外住宅",     "kind": "drain",  "pow": 0.86, "drain": 0.35, "text": "外で建てて持ち帰る", "origin": "米国の住宅会社を買収して海外を伸ばした" }],
+    "ultimate": { "name": "ゼロエネルギー住宅", "kind": "heal", "rate": 0.26, "text": "自前で立て直す", "origin": "エネルギー収支ゼロの住宅の普及を進める", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "2502": { "moves": [
+    { "name": "スーパードライ", "kind": "crit",  "pow": 0.92, "critAdd": 0.10, "text": "きれっきれの一撃", "origin": "辛口ビールで市場を作り替えた看板商品" },
+    { "name": "欧州買収",       "kind": "drain", "pow": 0.88, "drain": 0.35, "text": "外で稼いで持ち帰る", "origin": "欧州の有力ビールブランドを相次いで買収" }],
+    "ultimate": { "name": "生ジョッキ缶", "kind": "gamble", "maxMult": 2.4, "text": "開けてみないと分からない", "origin": "缶のふたが全開する商品が話題になった", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "2503": { "moves": [
+    { "name": "一番搾り", "kind": "sure",  "pow": 0.88, "text": "最初のひと搾りだけを使う", "origin": "製法を名前にした主力ビール" },
+    { "name": "ヘルスサイエンス", "kind": "dot", "rate": 0.05, "turns": 3, "text": "じわじわ効く", "origin": "免疫関連素材など健康領域を育てている" }],
+    "ultimate": { "name": "医薬子会社", "kind": "delay", "pow": 2.4, "turns": 1, "text": "研究の成果は遅れて出る", "origin": "バイオ医薬の子会社を収益の柱に持つ", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "2802": { "moves": [
+    { "name": "うま味",       "kind": "stack",  "pow": 0.72, "add": 6, "cap": 4, "text": "足すほど全体が良くなる", "origin": "うま味調味料の発見から始まった会社" },
+    { "name": "電子材料",     "kind": "pierce", "pow": 0.96, "pierce": 0.18, "text": "見えない薄膜で貫く", "origin": "半導体パッケージ用の絶縁フィルムで高シェア" }],
+    "ultimate": { "name": "ABF", "kind": "sure", "pow": 1.35, "text": "外さない。代わりがいない", "origin": "高性能半導体に不可欠な層間絶縁材", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "3407": { "moves": [
+    { "name": "多角化",   "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "いろいろな方角から当てる", "origin": "繊維から住宅・ヘルスケアまで幅広く手がける" },
+    { "name": "サランラップ", "kind": "shield", "cut": 0.13, "turns": 2, "text": "薄いのに、よく守る", "origin": "家庭用ラップの定番ブランド" }],
+    "ultimate": { "name": "セパレータ", "kind": "pierce", "pow": 1.45, "pierce": 0.22, "text": "薄い膜が勝負を分ける", "origin": "リチウムイオン電池の絶縁膜で世界的地位", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4188": { "moves": [
+    { "name": "石化再編", "kind": "swap",  "text": "攻めと守りを入れ替える", "origin": "石油化学事業の構造改革を進めている" },
+    { "name": "機能材料", "kind": "stack", "pow": 0.72, "add": 6, "cap": 4, "text": "用途が増えるほど効く", "origin": "半導体・電池向けの高機能材料を育てる" }],
+    "ultimate": { "name": "炭素繊維", "kind": "delay", "pow": 2.4, "turns": 1, "text": "焼き上がるまで待つ", "origin": "軽くて強い炭素繊維を手がける", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "4307": { "moves": [
+    { "name": "シンクタンク", "kind": "sure",  "pow": 0.88, "text": "調べてから、外さずに当てる", "origin": "研究と提言を行うシンクタンク機能を持つ" },
+    { "name": "共同利用センター", "kind": "regen", "rate": 0.05, "text": "使われ続ける限り戻る", "origin": "金融機関が共同で使う基幹システムを運営" }],
+    "ultimate": { "name": "証券系システム", "kind": "shield", "cut": 0.22, "turns": 3, "text": "止められない", "origin": "証券会社の基幹システムを長く支えてきた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4452": { "moves": [
+    { "name": "アタック", "kind": "crit",  "pow": 0.90, "critAdd": 0.09, "text": "汚れを一点で落とす", "origin": "コンパクト洗剤で市場を変えた主力商品" },
+    { "name": "研究開発", "kind": "stack", "pow": 0.72, "add": 6, "cap": 4, "text": "積み重ねが効いてくる", "origin": "素材研究に長く投資し続けてきた" }],
+    "ultimate": { "name": "連続増配", "kind": "heal", "rate": 0.28, "text": "淡々と立て直す", "origin": "国内屈指の連続増配記録を持つ", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4503": { "moves": [
+    { "name": "前立腺がん", "kind": "dot",   "rate": 0.06, "turns": 3, "text": "じわじわ効かせる", "origin": "泌尿器がん領域の主力薬を持つ" },
+    { "name": "再生医療",   "kind": "delay", "pow": 2.3, "turns": 1, "text": "時間をかけて形になる", "origin": "細胞医療など先端領域に投資している" }],
+    "ultimate": { "name": "パイプライン", "kind": "gamble", "maxMult": 2.6, "text": "出るか出ないか", "origin": "開発中の新薬の成否が業績を左右する", "unlock": ["earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "4507": { "moves": [
+    { "name": "感染症",   "kind": "dot",   "rate": 0.06, "turns": 3, "text": "効いてくるのは後から", "origin": "抗インフルエンザ薬など感染症に強い" },
+    { "name": "創薬基盤", "kind": "sure",  "pow": 0.88, "text": "狙ったところに当てる", "origin": "自社創薬にこだわる研究体制" }],
+    "ultimate": { "name": "ゾフルーザ", "kind": "finisher", "mult": 1.9, "text": "一回で終わらせる", "origin": "1回の服用で治療する設計の抗ウイルス薬", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4519": { "moves": [
+    { "name": "抗体医薬", "kind": "pierce", "pow": 0.97, "pierce": 0.18, "text": "狙った標的だけを貫く", "origin": "抗体医薬の創薬技術に強みを持つ" },
+    { "name": "ロシュ提携", "kind": "drain", "pow": 0.88, "drain": 0.35, "text": "外とつながって力を得る", "origin": "スイスの大手製薬と資本業務提携している" }],
+    "ultimate": { "name": "ヘムライブラ", "kind": "delay", "pow": 2.7, "turns": 1, "text": "効くまで待つ価値がある", "origin": "血友病治療薬が世界で大きく伸びた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4543": { "moves": [
+    { "name": "カテーテル", "kind": "pierce", "pow": 0.96, "pierce": 0.18, "text": "細い管が奥まで通る", "origin": "血管内治療用のカテーテルで世界的地位" },
+    { "name": "体温計",     "kind": "sure",   "pow": 0.86, "text": "正確に測って、外さない", "origin": "電子体温計の普及を進めた原点の製品" }],
+    "ultimate": { "name": "人工心肺", "kind": "heal", "rate": 0.30, "text": "止まった流れを取り戻す", "origin": "心臓外科手術を支える装置を手がける", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4578": { "moves": [
+    { "name": "ポカリスエット", "kind": "heal",  "rate": 0.18, "text": "飲んで立て直す", "origin": "経口補水の考え方から生まれた飲料" },
+    { "name": "中枢神経",       "kind": "dot",   "rate": 0.06, "turns": 3, "text": "ゆっくり効く", "origin": "精神・神経領域の医薬に強い" }],
+    "ultimate": { "name": "医薬と食品の両輪", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "医薬品とニュートラシューティカルズの二本柱", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4661": { "moves": [
+    { "name": "年間パスポート", "kind": "regen", "rate": 0.06, "text": "通うたびに少し戻る", "origin": "何度も来場してもらう仕組みを持つ" },
+    { "name": "入園者数",       "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "人が来るほど効く", "origin": "テーマパークの集客がそのまま業績になる" }],
+    "ultimate": { "name": "新エリア開業", "kind": "delay", "pow": 2.6, "turns": 1, "text": "工事のあいだは静か、開けば一気に", "origin": "大型投資でエリアを増やしてきた", "unlock": ["awaken", "earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "4689": { "moves": [
+    { "name": "検索連動広告", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "小さな枠を数で押す", "origin": "ポータルと検索の広告が収益の柱" },
+    { "name": "メッセージ基盤", "kind": "first", "pow": 0.88, "text": "まず届く", "origin": "国内で広く使われるメッセージアプリを運営" }],
+    "ultimate": { "name": "経済圏統合", "kind": "stack", "pow": 0.80, "add": 9, "cap": 4, "text": "つなげるほど積み上がる", "origin": "検索・メッセージ・決済・通販の統合を進める", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "4901": { "moves": [
+    { "name": "写真からの転身", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "写真フィルムの需要消滅から事業を組み替えた" },
+    { "name": "バイオCDMO",     "kind": "drain", "pow": 0.88, "drain": 0.35, "text": "他人の分を作って、自分の力にする", "origin": "他社の医薬品を受託製造する事業を育てた" }],
+    "ultimate": { "name": "コラーゲンの知見", "kind": "heal", "rate": 0.28, "text": "古い技術で立て直す", "origin": "フィルム由来の材料技術を化粧品・医療へ転用した", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "5020": { "moves": [
+    { "name": "製油所",   "kind": "drain",  "pow": 0.88, "drain": 0.35, "text": "燃やして力に変える", "origin": "国内最大級の石油精製能力を持つ" },
+    { "name": "在庫影響", "kind": "gamble", "maxMult": 2.4, "text": "原油次第で振れる", "origin": "原油価格の変動が在庫評価を通じて損益を揺らす" }],
+    "ultimate": { "name": "エネルギー転換", "kind": "delay", "pow": 2.4, "turns": 1, "text": "長い時間をかけて切り替える", "origin": "再生エネルギー・水素への転換を進めている", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "5108": { "moves": [
+    { "name": "タイヤ",   "kind": "counter", "pow": 0.96, "text": "踏ん張って受け、返す", "origin": "タイヤで世界首位級のメーカー" },
+    { "name": "鉱山用",   "kind": "pierce",  "pow": 0.96, "pierce": 0.16, "text": "巨大なもので押しつぶす", "origin": "鉱山車両向けの超大型タイヤは高収益" }],
+    "ultimate": { "name": "ソリューション事業", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "履かせ続けるほど積み上がる", "origin": "売り切りでなく運行管理まで担う事業へ広げた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "5401": { "moves": [
+    { "name": "高炉",     "kind": "delay",  "pow": 2.3, "turns": 1, "text": "火を入れたら、後から効く", "origin": "国内最大の高炉メーカー" },
+    { "name": "電磁鋼板", "kind": "pierce", "pow": 0.96, "pierce": 0.18, "text": "薄い板が効率を決める", "origin": "モーター用の電磁鋼板で高い技術を持つ" }],
+    "ultimate": { "name": "海外製鉄所", "kind": "gamble", "maxMult": 2.6, "text": "大きく賭けた", "origin": "海外の製鉄会社を大型買収した", "unlock": ["earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "5802": { "moves": [
+    { "name": "ワイヤーハーネス", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "細い線を束ねて通す", "origin": "自動車の配線束で世界トップ級" },
+    { "name": "光ファイバ",       "kind": "first", "pow": 0.90, "text": "光の速さで先に届く", "origin": "光ファイバの製造技術を持つ" }],
+    "ultimate": { "name": "電動化需要", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "電気が増えるほど積み上がる", "origin": "自動車の電動化で配線の量と単価が増える", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "5803": { "moves": [
+    { "name": "光ケーブル", "kind": "first",  "pow": 0.92, "text": "先に通す", "origin": "光ファイバケーブルの大手" },
+    { "name": "データセンター向け", "kind": "stack", "pow": 0.76, "add": 8, "cap": 4, "text": "建つほど積み上がる", "origin": "データセンター需要で光配線が伸びた" }],
+    "ultimate": { "name": "間欠接着テープ心線", "kind": "sure", "pow": 1.35, "text": "細くて確実", "origin": "極細の光ケーブルを実現した独自構造", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "6146": { "moves": [
+    { "name": "ダイシング", "kind": "pierce", "pow": 0.98, "pierce": 0.20, "text": "切って分ける。刃が命", "origin": "ウエハーを切る装置で圧倒的シェア" },
+    { "name": "グラインダ", "kind": "crit",   "pow": 0.92, "critAdd": 0.10, "text": "削って薄くする", "origin": "研削装置でも高いシェアを持つ" }],
+    "ultimate": { "name": "切る・削る・磨く", "kind": "multi", "pow": 0.70, "min": 3, "max": 4, "text": "三工程を続けざまに", "origin": "後工程の三つの工程をすべて押さえている", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "6178": { "moves": [
+    { "name": "全国郵便網", "kind": "shield", "cut": 0.15, "turns": 3, "text": "どこにでも届く厚み", "origin": "全国の郵便局ネットワークを持つ" },
+    { "name": "窓口手数料", "kind": "regen",  "rate": 0.05, "text": "少しずつ入り続ける", "origin": "金融商品の窓口販売が収益源" }],
+    "ultimate": { "name": "保有株の売出し", "kind": "gamble", "maxMult": 2.3, "text": "動かすたびに揺れる", "origin": "傘下金融子会社の株式を段階的に売却してきた", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "6273": { "moves": [
+    { "name": "空気圧機器", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "空気で何度も押す", "origin": "空気圧制御機器で世界シェア首位" },
+    { "name": "多品種",     "kind": "sure",  "pow": 0.88, "text": "どんな現場にも合うものがある", "origin": "膨大な品種を在庫して即納する体制" }],
+    "ultimate": { "name": "無借金経営", "kind": "shield", "cut": 0.24, "turns": 3, "text": "誰にも崩せない", "origin": "潤沢な手元資金と高い自己資本比率", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6301": { "moves": [
+    { "name": "コムトラックス", "kind": "sure",  "pow": 0.88, "text": "どこにあるか全部見えている", "origin": "建機を遠隔監視する仕組みを世界に先駆けて搭載" },
+    { "name": "鉱山機械",       "kind": "pierce", "pow": 0.96, "pierce": 0.18, "text": "大きいものが土ごと削る", "origin": "超大型の鉱山機械を手がける" }],
+    "ultimate": { "name": "自動運転ダンプ", "kind": "first", "pow": 1.30, "text": "人を待たない", "origin": "無人運行する鉱山用ダンプを実用化した", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6326": { "moves": [
+    { "name": "小型トラクタ", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "小回りで数を当てる", "origin": "北米で小型トラクタが強い" },
+    { "name": "水と土",       "kind": "regen", "rate": 0.05, "text": "地道に戻していく", "origin": "食料・水・環境を掲げる事業領域" }],
+    "ultimate": { "name": "スマート農業", "kind": "delay", "pow": 2.4, "turns": 1, "text": "育ててから刈り取る", "origin": "自動運転農機やデータ営農を進めている", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6701": { "moves": [
+    { "name": "海底ケーブル", "kind": "pierce", "pow": 0.96, "pierce": 0.16, "text": "海の底から通す", "origin": "大洋横断の海底光ケーブル敷設で世界有数" },
+    { "name": "顔認証",       "kind": "sure",   "pow": 0.90, "text": "必ず見つけ出す", "origin": "顔認証の精度評価で世界首位の実績" }],
+    "ultimate": { "name": "官公需", "kind": "shield", "cut": 0.22, "turns": 3, "text": "太い後ろ盾", "origin": "官公庁向けシステムに厚い基盤を持つ", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "6702": { "moves": [
+    { "name": "システム統合", "kind": "stack", "pow": 0.72, "add": 6, "cap": 4, "text": "つなげるほど大きくなる", "origin": "国内最大級のシステム構築会社" },
+    { "name": "スーパーコンピュータ", "kind": "crit", "pow": 0.94, "critAdd": 0.10, "text": "計算量で叩き潰す", "origin": "世界一位を獲得したスパコンを開発した" }],
+    "ultimate": { "name": "富岳", "kind": "delay", "pow": 2.6, "turns": 1, "text": "全力で計算してから撃つ", "origin": "理研と共同開発したスーパーコンピュータ", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6723": { "moves": [
+    { "name": "車載マイコン", "kind": "sure",   "pow": 0.90, "text": "止まらない。外さない", "origin": "自動車用マイコンで世界首位級" },
+    { "name": "統合再編",     "kind": "swap",   "text": "攻めと守りを入れ替える", "origin": "複数の半導体事業が統合してできた会社" }],
+    "ultimate": { "name": "供給制約", "kind": "gamble", "maxMult": 2.6, "text": "足りない時ほど強い", "origin": "車載半導体の需給が業績を大きく振らす", "unlock": ["limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6752": { "moves": [
+    { "name": "車載電池", "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "充電するほど溜まる", "origin": "電気自動車向け電池を大規模に供給する" },
+    { "name": "白物家電", "kind": "regen",  "rate": 0.05, "text": "毎日使われて、少しずつ戻る", "origin": "国内の生活家電で長く高いシェアを持つ" }],
+    "ultimate": { "name": "北米ギガファクトリー", "kind": "delay", "pow": 2.5, "turns": 1, "text": "立ち上げに時間がかかる", "origin": "米国の大型電池工場への巨額投資", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6762": { "moves": [
+    { "name": "小型電池", "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "小さいものを大量に", "origin": "スマホ用の小型二次電池で世界首位級" },
+    { "name": "受動部品", "kind": "shield", "cut": 0.13, "turns": 2, "text": "目立たないが無いと困る", "origin": "コンデンサ・インダクタなど電子部品の大手" }],
+    "ultimate": { "name": "HDDヘッド", "kind": "pierce", "pow": 1.45, "pierce": 0.22, "text": "極小の一点を読み取る", "origin": "ハードディスクの磁気ヘッドで高シェア", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6902": { "moves": [
+    { "name": "系列",     "kind": "shield", "cut": 0.14, "turns": 3, "text": "後ろに大きな存在がいる", "origin": "トヨタグループの中核部品メーカー" },
+    { "name": "熱マネジメント", "kind": "heal", "rate": 0.16, "text": "冷やして立て直す", "origin": "車両の熱制御システムに強い" }],
+    "ultimate": { "name": "電動化部品", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "切り替わるほど積み上がる", "origin": "インバータなど電動車向け部品を伸ばしている", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6920": { "moves": [
+    { "name": "マスク欠陥検査", "kind": "sure",   "pow": 0.92, "text": "見逃さない", "origin": "EUV露光用マスクの検査装置で独占的地位" },
+    { "name": "少数精鋭",       "kind": "crit",   "pow": 0.94, "critAdd": 0.11, "text": "人数は少ないが一撃が重い", "origin": "少ない従業員数で高い利益を上げる" }],
+    "ultimate": { "name": "唯一の供給者", "kind": "pierce", "pow": 1.50, "pierce": 0.30, "text": "代わりがいない", "origin": "一部の検査装置で事実上の独占供給", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "6954": { "moves": [
+    { "name": "CNC",       "kind": "first",  "pow": 0.92, "text": "工作機械の頭脳を握る", "origin": "工作機械用CNC装置で世界首位" },
+    { "name": "黄色い工場", "kind": "shield", "cut": 0.16, "turns": 3, "text": "厚い財務で受ける", "origin": "自社の色で統一された生産拠点と潤沢な手元資金" }],
+    "ultimate": { "name": "サービスファースト", "kind": "regen", "rate": 0.08, "text": "壊れても直し続ける", "origin": "販売した機械を長期間サポートし続ける方針", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6971": { "moves": [
+    { "name": "ファインセラミックス", "kind": "shield", "cut": 0.15, "turns": 3, "text": "硬い。ただ硬い", "origin": "セラミック部品から始まった会社" },
+    { "name": "アメーバ経営",         "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "小さな単位が各々に動く", "origin": "組織を小集団に分けて採算を管理する手法" }],
+    "ultimate": { "name": "保有株式", "kind": "gamble", "maxMult": 2.3, "text": "持っているものが揺れる", "origin": "通信会社株など大量の投資有価証券を保有する", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "6981": { "moves": [
+    { "name": "積層セラミックコンデンサ", "kind": "multi", "pow": 0.60, "min": 3, "max": 4, "text": "極小の部品を数で押す", "origin": "MLCC で世界首位。1 台に数千個使われる" },
+    { "name": "内製設備", "kind": "sure", "pow": 0.90, "text": "作る機械から自分で作る", "origin": "製造装置を自社で開発して品質を囲い込む" }],
+    "ultimate": { "name": "薄さの限界", "kind": "pierce", "pow": 1.45, "pierce": 0.24, "text": "誰も真似できない薄さ", "origin": "何百層も積む微細加工技術", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7182": { "moves": [
+    { "name": "巨大預金", "kind": "shield", "cut": 0.16, "turns": 3, "text": "集まった量そのものが守り", "origin": "国内有数の預金残高を持つ" },
+    { "name": "市場運用", "kind": "gamble", "maxMult": 2.3, "text": "預かった金を相場に置く", "origin": "貸出より有価証券運用の比重が高い" }],
+    "ultimate": { "name": "全国の窓口", "kind": "regen", "rate": 0.07, "text": "細く長く入り続ける", "origin": "郵便局網を通じた全国の顧客基盤", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7269": { "moves": [
+    { "name": "インド",   "kind": "stack",  "pow": 0.76, "add": 8, "cap": 4, "text": "伸びる場所にいると積み上がる", "origin": "インドの四輪市場で圧倒的シェア" },
+    { "name": "軽自動車", "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "小さいものを数で", "origin": "国内の軽自動車で長く高いシェア" }],
+    "ultimate": { "name": "小さいクルマの思想", "kind": "counter", "pow": 1.35, "text": "小さく構えて、返す", "origin": "小型車に資源を集中する一貫した戦略", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7270": { "moves": [
+    { "name": "水平対向", "kind": "counter", "pow": 0.98, "text": "低く構えて受け流す", "origin": "重心の低い水平対向エンジンにこだわる" },
+    { "name": "アイサイト", "kind": "sure",  "pow": 0.90, "text": "ぶつからない。外さない", "origin": "ステレオカメラによる運転支援システム" }],
+    "ultimate": { "name": "北米偏重", "kind": "gamble", "maxMult": 2.5, "text": "一つの市場に賭けている", "origin": "売上の大半を北米市場に依存する", "unlock": ["earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "7309": { "moves": [
+    { "name": "変速機", "kind": "first",  "pow": 0.92, "text": "軽いギアで先に出る", "origin": "自転車用変速機で世界シェアの大半を握る" },
+    { "name": "釣具",   "kind": "counter", "pow": 0.94, "text": "引いて、かける", "origin": "リールなど釣具でも世界的ブランド" }],
+    "ultimate": { "name": "デュラエース", "kind": "sure", "pow": 1.35, "text": "頂点の精度", "origin": "プロが使う最上位コンポーネント", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7733": { "moves": [
+    { "name": "内視鏡", "kind": "pierce", "pow": 0.98, "pierce": 0.20, "text": "体の内側まで見て、貫く", "origin": "消化器内視鏡で世界シェア約7割" },
+    { "name": "処置具", "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "細かい道具を次々に使う", "origin": "内視鏡と組み合わせる処置具が収益源" }],
+    "ultimate": { "name": "医療専業へ", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "カメラ事業を手放し医療機器に集中した", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7751": { "moves": [
+    { "name": "レンズ",   "kind": "crit",   "pow": 0.92, "critAdd": 0.10, "text": "一点に光を集める", "origin": "光学技術を中核に据えた会社。レンズから複合機・半導体装置まで広げた" },
+    { "name": "オフィス機器", "kind": "regen", "rate": 0.05, "text": "消耗品が少しずつ効く", "origin": "複合機とトナーの継続収益" }],
+    "ultimate": { "name": "ナノインプリント", "kind": "delay", "pow": 2.5, "turns": 1, "text": "型を押し当てるまで待つ", "origin": "型で回路を転写する次世代の半導体露光技術", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7832": { "moves": [
+    { "name": "ガンダム", "kind": "stack",  "pow": 0.76, "add": 8, "cap": 4, "text": "組み立てるほど強くなる", "origin": "長寿命の巨大IPとプラモデル事業" },
+    { "name": "アーケード", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "何度も遊ばれる", "origin": "ゲームセンター向け機器も手がける" }],
+    "ultimate": { "name": "IPの寿命", "kind": "regen", "rate": 0.08, "text": "終わらない。だから戻る", "origin": "何十年も続く作品群が収益を支える", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "7936": { "moves": [
+    { "name": "ランニングシューズ", "kind": "first", "pow": 0.90, "text": "速く走る。先に着く", "origin": "長距離向けシューズで世界的な評価" },
+    { "name": "足型データ",         "kind": "sure",  "pow": 0.88, "text": "測ってから、合わせて当てる", "origin": "長年蓄積した足の計測データを設計に使う" }],
+    "ultimate": { "name": "厚底革命", "kind": "gamble", "maxMult": 2.5, "text": "技術が変われば一気に変わる", "origin": "反発素材と厚底で競技用靴の勢力図が変わった", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "8002": { "moves": [
+    { "name": "電力事業", "kind": "regen", "rate": 0.05, "text": "細く長く入る", "origin": "海外の発電事業に厚い実績を持つ" },
+    { "name": "農業資材", "kind": "stack", "pow": 0.72, "add": 6, "cap": 4, "text": "撒くほど効いてくる", "origin": "米国の農業資材流通を傘下に持つ" }],
+    "ultimate": { "name": "減損の記憶", "kind": "counter", "pow": 1.35, "text": "一度沈んでから返す", "origin": "大型の減損損失を経て財務を立て直した", "unlock": ["earnings", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "8015": { "moves": [
+    { "name": "アフリカ", "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "早く入った分だけ積み上がる", "origin": "アフリカの自動車流通に強い地盤を持つ" },
+    { "name": "グループ物流", "kind": "first", "pow": 0.88, "text": "系列の荷を先に流す", "origin": "トヨタグループの商社として物流を担う" }],
+    "ultimate": { "name": "リチウム権益", "kind": "delay", "pow": 2.4, "turns": 1, "text": "掘り当てるまで待つ", "origin": "電池材料の上流に投資してきた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8053": { "moves": [
+    { "name": "メディア",   "kind": "regen", "rate": 0.05, "text": "毎月少しずつ入る", "origin": "ケーブルテレビなどメディア事業を持つ" },
+    { "name": "不動産",     "kind": "shield", "cut": 0.14, "turns": 3, "text": "土地が守りになる", "origin": "都市部の不動産開発も手がける" }],
+    "ultimate": { "name": "資源からの転換", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "資源依存を下げ非資源に軸足を移してきた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8113": { "moves": [
+    { "name": "紙おむつ", "kind": "regen", "rate": 0.06, "text": "毎日要るものは強い", "origin": "ベビー・大人用おむつが主力" },
+    { "name": "アジア展開", "kind": "stack", "pow": 0.74, "add": 7, "cap": 4, "text": "国が増えるほど積み上がる", "origin": "アジア新興国で高いシェアを築いた" }],
+    "ultimate": { "name": "不織布技術", "kind": "sure", "pow": 1.30, "text": "薄くて確実", "origin": "吸収体と不織布の加工技術が競争力の源", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8267": { "moves": [
+    { "name": "PB商品",   "kind": "drain", "pow": 0.86, "drain": 0.35, "text": "自分の棚で、自分の分を取る", "origin": "自主企画商品の比率を高めてきた" },
+    { "name": "総合スーパー", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "何でも置いて、数で当たる", "origin": "全国に展開する総合小売グループ" }],
+    "ultimate": { "name": "金融とデベロッパー", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "小売のほか銀行とモール開発を抱える", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "8308": { "moves": [
+    { "name": "スーパー", "kind": "first",  "pow": 0.88, "text": "身軽に先へ出る", "origin": "メガバンクとは違う中堅・個人重視の路線" },
+    { "name": "手数料ビジネス", "kind": "regen", "rate": 0.05, "text": "細かく、少しずつ", "origin": "貸出金利以外の収益を厚くしてきた" }],
+    "ultimate": { "name": "公的資金完済", "kind": "counter", "pow": 1.35, "text": "沈んだところから返す", "origin": "注入された公的資金を完済して自立した", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "8309": { "moves": [
+    { "name": "信託",     "kind": "shield", "cut": 0.14, "turns": 3, "text": "預かったものを守る", "origin": "国内最大級の信託銀行グループ" },
+    { "name": "年金運用", "kind": "regen",  "rate": 0.05, "text": "長い時間をかけて戻る", "origin": "企業年金の管理・運用に強い" }],
+    "ultimate": { "name": "受託資産", "kind": "stack", "pow": 0.78, "add": 8, "cap": 4, "text": "預かるほど積み上がる", "origin": "膨大な受託資産残高が収益基盤", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8591": { "moves": [
+    { "name": "リース",   "kind": "regen",  "rate": 0.05, "text": "貸したものが少しずつ戻る", "origin": "リース業から多角化した金融グループ" },
+    { "name": "事業投資", "kind": "gamble", "maxMult": 2.4, "text": "買って、育てて、売る", "origin": "企業を買収して価値を上げてから売却する" }],
+    "ultimate": { "name": "何でも屋", "kind": "multi", "pow": 0.70, "min": 3, "max": 4, "text": "あらゆる方角から当たる", "origin": "航空機・不動産・環境エネルギーまで手を広げた", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "8604": { "moves": [
+    { "name": "ホールセール", "kind": "gamble", "maxMult": 2.6, "text": "張った分だけ振れる", "origin": "海外の投資銀行部門が損益を大きく振らす" },
+    { "name": "営業部門",     "kind": "regen",  "rate": 0.05, "text": "手数料が細かく入る", "origin": "国内最大の証券リテール網" }],
+    "ultimate": { "name": "相場の子", "kind": "finisher", "mult": 1.9, "text": "相場が動いた時だけ、牙を剥く", "origin": "市況の良し悪しが業績にそのまま出る", "unlock": ["limitUp", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "8630": { "moves": [
+    { "name": "介護事業", "kind": "regen",  "rate": 0.06, "text": "地道に戻し続ける", "origin": "損保から介護へ事業を広げた" },
+    { "name": "海外損保", "kind": "reflect", "ratio": 0.28, "text": "受けた分を外へ回す", "origin": "海外保険会社の買収で収益源を分散した" }],
+    "ultimate": { "name": "料率改定", "kind": "stack", "pow": 0.78, "add": 8, "cap": 4, "text": "上げるほど効いてくる", "origin": "自然災害の増加を受けた保険料率の見直し", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8697": { "moves": [
+    { "name": "取引所",   "kind": "regen",  "rate": 0.06, "text": "取引があるだけで入る", "origin": "東証・大阪取引所を運営する" },
+    { "name": "清算機関", "kind": "shield", "cut": 0.16, "turns": 3, "text": "決済を止めない", "origin": "清算・決済インフラも担う" }],
+    "ultimate": { "name": "売買代金", "kind": "gamble", "maxMult": 2.4, "text": "相場が荒れるほど儲かる", "origin": "市場の売買が増えるほど手数料が入る", "unlock": ["limitUp", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "8725": { "moves": [
+    { "name": "統合の歴史", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "寄せ集めた分だけ手数がある", "origin": "複数の損保が統合してできたグループ" },
+    { "name": "海外事業",   "kind": "drain", "pow": 0.86, "drain": 0.35, "text": "外で受けて持ち帰る", "origin": "アジア・欧州の保険会社を傘下に持つ" }],
+    "ultimate": { "name": "政策保有株売却", "kind": "heal", "rate": 0.28, "text": "持ち物を手放して立て直す", "origin": "政策保有株の縮減を進めて資本を厚くしている", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8750": { "moves": [
+    { "name": "営業職員", "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "人の数だけ手がある", "origin": "全国の営業職員による対面販売が基盤" },
+    { "name": "第一フロンティア", "kind": "drain", "pow": 0.86, "drain": 0.35, "text": "別の入口からも取る", "origin": "銀行窓販専門の子会社を持つ" }],
+    "ultimate": { "name": "金利と死亡率", "kind": "gamble", "maxMult": 2.4, "text": "読めない二つに賭けている", "origin": "生命保険の損益は金利と保険事故に左右される", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8801": { "moves": [
+    { "name": "ららぽーと", "kind": "regen", "rate": 0.06, "text": "人が来るたび少し入る", "origin": "大型商業施設の開発・運営" },
+    { "name": "日本橋",     "kind": "shield", "cut": 0.15, "turns": 3, "text": "街ごと持っている厚み", "origin": "日本橋エリアの再開発を長く手がける" }],
+    "ultimate": { "name": "含み益の解放", "kind": "finisher", "mult": 1.9, "text": "追い込まれたら、売る", "origin": "簿価と時価の差が大きい保有不動産", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8802": { "moves": [
+    { "name": "丸の内",   "kind": "shield", "cut": 0.17, "turns": 3, "text": "一等地は崩れない", "origin": "丸の内の大家として知られる" },
+    { "name": "賃料改定", "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "上げるたびに積み上がる", "origin": "オフィス賃料の改定が収益を押し上げる" }],
+    "ultimate": { "name": "再開発", "kind": "delay", "pow": 2.6, "turns": 1, "text": "建つまでは静か", "origin": "超高層ビルの建て替えを継続的に進めている", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8830": { "moves": [
+    { "name": "自社施工", "kind": "stack",  "pow": 0.74, "add": 7, "cap": 4, "text": "自分でやるから積み上がる", "origin": "設計から施工まで自社で行う体制" },
+    { "name": "賃貸中心", "kind": "regen",  "rate": 0.06, "text": "毎月確実に入る", "origin": "保有ビルの賃貸収入が安定収益源" }],
+    "ultimate": { "name": "借入で建てる", "kind": "gamble", "maxMult": 2.4, "text": "レバレッジをかけて建て続ける", "origin": "積極的な借入で開発を続ける財務戦略", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9020": { "moves": [
+    { "name": "山手線",   "kind": "regen",  "rate": 0.07, "text": "毎日、必ず人が乗る", "origin": "首都圏の稠密な路線網が収益基盤" },
+    { "name": "駅ナカ",   "kind": "drain",  "pow": 0.86, "drain": 0.35, "text": "通り道で取る", "origin": "駅構内の商業開発で運輸以外の収益を作った" }],
+    "ultimate": { "name": "不動産開発", "kind": "delay", "pow": 2.4, "turns": 1, "text": "駅の上に建ててから効く", "origin": "駅周辺の大型開発を成長の柱に据える", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9021": { "moves": [
+    { "name": "山陽新幹線", "kind": "first",  "pow": 0.92, "text": "速く、先に着く", "origin": "山陽新幹線が収益の柱" },
+    { "name": "駅ビル",     "kind": "regen",  "rate": 0.05, "text": "駅そのものが稼ぐ", "origin": "主要駅の商業施設を運営する" }],
+    "ultimate": { "name": "インバウンド", "kind": "gamble", "maxMult": 2.4, "text": "波が来た時に一気に", "origin": "関西の観光需要が業績を大きく動かす", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "9022": { "moves": [
+    { "name": "東海道新幹線", "kind": "first", "pow": 0.94, "text": "日本の大動脈。誰より先に通る", "origin": "東海道新幹線が収益のほぼすべてを生む" },
+    { "name": "高収益",       "kind": "crit",  "pow": 0.92, "critAdd": 0.10, "text": "一本に集中しているから鋭い", "origin": "単一路線への集中が高い利益率を生む" }],
+    "ultimate": { "name": "リニア中央新幹線", "kind": "delay", "pow": 2.8, "turns": 1, "text": "何十年も溜めている", "origin": "超電導リニアによる新幹線を建設中", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9101": { "moves": [
+    { "name": "コンテナ同盟", "kind": "drain",  "pow": 0.88, "drain": 0.35, "text": "他と組んで取る", "origin": "国内3社のコンテナ船事業を統合した合弁に出資" },
+    { "name": "自動車船",     "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "大量に積んで運ぶ", "origin": "完成車輸送の自動車専用船に強い" }],
+    "ultimate": { "name": "海運市況", "kind": "gamble", "maxMult": 3.0, "text": "上がる時はどこまでも上がる", "origin": "運賃市況の急変で利益が桁違いに動く", "unlock": ["limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9104": { "moves": [
+    { "name": "LNG船",   "kind": "shield", "cut": 0.14, "turns": 3, "text": "長期契約が守りになる", "origin": "長期用船契約のLNG船を多く抱える" },
+    { "name": "ドライバルク", "kind": "gamble", "maxMult": 2.5, "text": "市況で大きく振れる", "origin": "鉄鉱石・石炭を運ぶばら積み船" }],
+    "ultimate": { "name": "配当性向", "kind": "heal", "rate": 0.30, "text": "稼いだ年に、大きく返す", "origin": "好況期の高配当で知られる", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9202": { "moves": [
+    { "name": "国際線",   "kind": "first",  "pow": 0.90, "text": "空を先に取る", "origin": "国際線ネットワークが収益の柱" },
+    { "name": "貨物",     "kind": "drain",  "pow": 0.86, "drain": 0.35, "text": "人が乗らない時は荷を積む", "origin": "旅客が落ち込んだ時期を貨物が支えた" }],
+    "ultimate": { "name": "燃油と為替", "kind": "gamble", "maxMult": 2.5, "text": "二つの外的要因に揺さぶられる", "origin": "燃料価格と円相場が損益を大きく動かす", "unlock": ["limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9735": { "moves": [
+    { "name": "オンライン・セキュリティ", "kind": "sure",  "pow": 0.90, "text": "常に見ている。外さない", "origin": "機械警備の仕組みを日本で確立した" },
+    { "name": "契約の積み上げ",           "kind": "stack", "pow": 0.74, "add": 7, "cap": 4, "text": "契約が増えるほど強い", "origin": "月々の警備契約が積み上がる収益構造" }],
+    "ultimate": { "name": "駆けつける", "kind": "counter", "pow": 1.40, "text": "起きてから、確実に行く", "origin": "異常を検知して人が現場に急行する体制", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4755": { "moves": [
+    { "name": "楽天経済圏", "kind": "stack", "pow": 0.74, "add": 7, "cap": 4, "text": "囲い込むほど積み上がる", "origin": "通販・カード・銀行・証券をポイントで束ねる" },
+    { "name": "自前回線",   "kind": "gamble", "maxMult": 2.6, "text": "敷いた分だけ、いつか返ってくる（かもしれない）", "origin": "携帯事業への巨額投資が損益を大きく振らす" }],
+    "ultimate": { "name": "ポイント還元", "kind": "drain", "pow": 1.40, "drain": 0.40, "text": "配りながら取り返す", "origin": "還元でユーザーを呼び、経済圏の中で回収する", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "9843": { "moves": [
+    { "name": "製造物流小売", "kind": "stack", "pow": 0.74, "add": 7, "cap": 4, "text": "全部自分でやるから積み上がる", "origin": "企画から製造・物流・販売まで自社で一貫して行う" },
+    { "name": "お、ねだん以上", "kind": "sure", "pow": 0.88, "text": "派手ではないが、必ず効く", "origin": "価格に対する値打ちを掲げた長年の標語" }],
+    "ultimate": { "name": "連続増益", "kind": "regen", "rate": 0.09, "text": "何年でも、淡々と戻す", "origin": "長期にわたる連続増収増益で知られる", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7453": { "moves": [
+    { "name": "わけあって、安い", "kind": "pierce", "pow": 0.95, "pierce": 0.16, "text": "飾りを削って、まっすぐ通す", "origin": "包装や装飾を省いて本質だけを残す商品思想" },
+    { "name": "生活雑貨",       "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "小さなものを数で押す", "origin": "衣・食・住をまたぐ幅広い品揃え" }],
+    "ultimate": { "name": "世界の無印", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "出す国が増えるほど積み上がる", "origin": "海外店舗の拡大が成長の柱", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "3092": { "moves": [
+    { "name": "ツケ払い", "kind": "delay", "pow": 2.3, "turns": 1, "text": "払いは後から。効くのも後から", "origin": "後払い決済で若年層の購買を取り込んだ" },
+    { "name": "ゾゾスーツ", "kind": "sure", "pow": 0.88, "text": "測ってから、外さずに当てる", "origin": "体型を計測して服を合わせる試み" }],
+    "ultimate": { "name": "受託ショップ", "kind": "drain", "pow": 1.40, "drain": 0.40, "text": "他人の売り場から取る", "origin": "ブランドの店舗を預かって手数料を得る仕組み", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "2897": { "moves": [
+    { "name": "即席麺", "kind": "first", "pow": 0.90, "text": "三分で立ち上がる", "origin": "世界初のインスタントラーメンを生んだ会社" },
+    { "name": "カップヌードル", "kind": "crit", "pow": 0.92, "critAdd": 0.10, "text": "定番が、決まるときは決まる", "origin": "半世紀以上売れ続ける看板商品" }],
+    "ultimate": { "name": "完全栄養食", "kind": "heal", "rate": 0.28, "text": "これひとつで立て直す", "origin": "栄養を満たす食品の開発を進めている", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "2801": { "moves": [
+    { "name": "しょうゆ", "kind": "dot", "rate": 0.05, "turns": 3, "text": "じわじわ染みる", "origin": "江戸期から続く醸造が原点" },
+    { "name": "北米展開", "kind": "stack", "pow": 0.74, "add": 7, "cap": 4, "text": "外の食卓に入るほど積み上がる", "origin": "米国で調味料として定着させた海外事業" }],
+    "ultimate": { "name": "発酵の時間", "kind": "delay", "pow": 2.4, "turns": 1, "text": "寝かせた分だけ濃くなる", "origin": "長期の発酵・熟成を要する製法", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4911": { "moves": [
+    { "name": "プレステージ", "kind": "crit", "pow": 0.92, "critAdd": 0.10, "text": "高いところで一点に決める", "origin": "高価格帯の化粧品ブランド群が収益の柱" },
+    { "name": "インバウンド", "kind": "gamble", "maxMult": 2.5, "text": "人の流れ次第で大きく振れる", "origin": "訪日客と越境需要が業績を大きく動かす" }],
+    "ultimate": { "name": "皮膚科学", "kind": "heal", "rate": 0.28, "text": "研究の蓄積で立て直す", "origin": "長年の肌研究を製品に落とし込んできた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "6594": { "moves": [
+    { "name": "精密小型モーター", "kind": "multi", "pow": 0.60, "min": 3, "max": 4, "text": "小さいものを大量に回す", "origin": "HDD 用などの小型モーターで世界首位級" },
+    { "name": "M&A",             "kind": "stack", "pow": 0.76, "add": 8, "cap": 4, "text": "買うほど積み上がる", "origin": "多数の企業買収で事業を広げてきた" }],
+    "ultimate": { "name": "回るものは、すべて", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "モーターで回るものすべてを狙うという方針", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7013": { "moves": [
+    { "name": "航空エンジン", "kind": "first",  "pow": 0.92, "text": "推力で先に出る", "origin": "民間航空機エンジンの部品を長く手がける" },
+    { "name": "橋梁・プラント", "kind": "shield", "cut": 0.14, "turns": 3, "text": "重いものが受け止める", "origin": "橋や大型プラントの建設を担ってきた" }],
+    "ultimate": { "name": "防需拡大", "kind": "stack", "pow": 0.80, "add": 9, "cap": 4, "text": "積み上がる受注", "origin": "防衛関連の受注増が業績を押し上げる", "unlock": ["awaken", "limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9602": { "moves": [
+    { "name": "興行収入", "kind": "gamble", "maxMult": 2.5, "text": "当たれば大きい", "origin": "映画の配給と興行が収益の柱" },
+    { "name": "不動産",   "kind": "shield", "cut": 0.15, "turns": 3, "text": "持っている土地が守りになる", "origin": "劇場周辺の不動産が安定収益源" }],
+    "ultimate": { "name": "ゴジラ", "kind": "finisher", "mult": 1.95, "text": "出てきたら、街ごと", "origin": "70 年続く自社の怪獣映画シリーズ", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "2587": { "moves": [
+    { "name": "自販機網", "kind": "regen", "rate": 0.06, "text": "毎日どこかで売れている", "origin": "全国に展開した自動販売機の販路" },
+    { "name": "伊右衛門", "kind": "sure",  "pow": 0.88, "text": "定番は外さない", "origin": "緑茶飲料の主力ブランド" }],
+    "ultimate": { "name": "やってみなはれ", "kind": "gamble", "maxMult": 2.4, "text": "とにかくやってみる", "origin": "創業以来受け継がれる挑戦を促す言葉", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "4324": { "moves": [
+    { "name": "メディアバイイング", "kind": "drain", "pow": 0.88, "drain": 0.35, "text": "間に立って取る", "origin": "広告枠の仕入れと販売が伝統的な収益源" },
+    { "name": "海外デジタル",       "kind": "stack", "pow": 0.72, "add": 6, "cap": 4, "text": "手売りから画面へ寄せるほど積み上がる", "origin": "海外のデジタル広告事業を買収で広げた" }],
+    "ultimate": { "name": "大型イベント", "kind": "delay", "pow": 2.5, "turns": 1, "text": "本番までは静か", "origin": "国際的な大会の運営に深く関わってきた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7550": { "moves": [
+    { "name": "すき家", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "安く、早く、何度も", "origin": "牛丼チェーンが中核ブランド" },
+    { "name": "多ブランド", "kind": "stack", "pow": 0.72, "add": 6, "cap": 4, "text": "業態が増えるほど積み上がる", "origin": "回転寿司・ハンバーガーなど多数の外食業態を抱える" }],
+    "ultimate": { "name": "海外出店", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "国が増えるほど強くなる", "origin": "北米・中南米への出店を加速している", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "3099": { "moves": [
+    { "name": "外商",     "kind": "crit",   "pow": 0.94, "critAdd": 0.11, "text": "限られた客に、深く", "origin": "富裕層の得意客を訪問販売する伝統的な商い" },
+    { "name": "一等地",   "kind": "shield", "cut": 0.15, "turns": 3, "text": "場所そのものが強さ", "origin": "都心一等地の店舗が不動産価値を持つ" }],
+    "ultimate": { "name": "インバウンド消費", "kind": "gamble", "maxMult": 2.6, "text": "波が来れば一気に", "origin": "訪日客の高額消費が売上を大きく動かす", "unlock": ["awaken", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "8252": { "moves": [
+    { "name": "エポスカード", "kind": "regen", "rate": 0.06, "text": "使われ続ける限り戻る", "origin": "小売よりカード・金融が収益の柱になっている" },
+    { "name": "売らない店",   "kind": "swap",  "text": "攻めと守りを入れ替える", "origin": "商品を売らず体験を提供する店舗への転換" }],
+    "ultimate": { "name": "小売から金融へ", "kind": "drain", "pow": 1.40, "drain": 0.40, "text": "貸して、取り戻す", "origin": "百貨店から金融中心へ業態を組み替えた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "3086": { "moves": [
+    { "name": "大丸松坂屋", "kind": "shield", "cut": 0.14, "turns": 3, "text": "老舗の厚み", "origin": "二つの老舗百貨店が統合してできた会社" },
+    { "name": "パルコ",     "kind": "first",  "pow": 0.88, "text": "若い層を先に取る", "origin": "商業施設のパルコを傘下に持つ" }],
+    "ultimate": { "name": "不動産再開発", "kind": "delay", "pow": 2.4, "turns": 1, "text": "建て替えてから効く", "origin": "店舗の建て替えと複合開発を進めている", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9766": { "moves": [
+    { "name": "遊戯機器", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "何度も遊ばれる", "origin": "アミューズメント機器を長く手がける" },
+    { "name": "スポーツクラブ", "kind": "regen", "rate": 0.06, "text": "通われる限り戻る", "origin": "フィットネスクラブの運営も収益源" }],
+    "ultimate": { "name": "長寿IP", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "続くほど積み上がる", "origin": "何十年も続くゲームシリーズを複数抱える", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "4385": { "moves": [
+    { "name": "個人間取引", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "小さな取引を数で押す", "origin": "個人どうしが売買するフリマアプリ" },
+    { "name": "手数料",     "kind": "drain", "pow": 0.88, "drain": 0.35, "text": "通るたびに少し抜く", "origin": "取引成立時の手数料が収益の柱" }],
+    "ultimate": { "name": "二次流通", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "一次流通の外側に別の市場を作った", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "4751": { "moves": [
+    { "name": "ABEMA",   "kind": "gamble", "maxMult": 2.6, "text": "投資が先、回収は後", "origin": "動画配信への先行投資が損益を振らす" },
+    { "name": "ゲーム",   "kind": "crit",   "pow": 0.92, "critAdd": 0.10, "text": "当たると一気に跳ねる", "origin": "スマートフォン向けゲームが収益の柱" }],
+    "ultimate": { "name": "ネット広告", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "任される量が増えるほど積み上がる", "origin": "インターネット広告代理の国内最大手級", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "2782": { "moves": [
+    { "name": "百円均一", "kind": "multi", "pow": 0.56, "min": 3, "max": 4, "text": "安いものを、とにかく数で", "origin": "百円ショップの大手" },
+    { "name": "商品回転", "kind": "first", "pow": 0.88, "text": "入れ替えが速い", "origin": "売れ筋を細かく入れ替える店舗運営" }],
+    "ultimate": { "name": "POSの読み", "kind": "sure", "pow": 1.30, "text": "データどおりに、外さない", "origin": "販売データにもとづく品揃えの精度", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "3659": { "moves": [
+    { "name": "メイプルストーリー", "kind": "regen", "rate": 0.07, "text": "長く続くものは強い", "origin": "20 年以上続くオンラインゲームが柱" },
+    { "name": "海外比率",           "kind": "gamble", "maxMult": 2.4, "text": "外の調子に振られる", "origin": "売上の大半が韓国・中国など海外" }],
+    "ultimate": { "name": "IPの再生", "kind": "heal", "rate": 0.28, "text": "古いものを作り直して立て直す", "origin": "既存タイトルの作り直しで収益を取り戻す手法", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9962": { "moves": [
+    { "name": "カタログ",   "kind": "sure",  "pow": 0.90, "text": "載っているものは必ずある", "origin": "膨大な部品を型番で選べるようにした商売" },
+    { "name": "確実短納期", "kind": "first", "pow": 0.92, "text": "とにかく速く届く", "origin": "納期の確実さを看板に掲げる" }],
+    "ultimate": { "name": "meviy", "kind": "delay", "pow": 2.4, "turns": 1, "text": "図面を投げれば、あとは出てくる", "origin": "3D データから部品を自動見積・製造する仕組み", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "7911": { "moves": [
+    { "name": "印刷から電子へ", "kind": "swap",  "text": "攻めと守りを入れ替える", "origin": "印刷業から電子部品・半導体材料へ軸足を移した" },
+    { "name": "包装材",         "kind": "shield", "cut": 0.13, "turns": 2, "text": "中身を守るのが仕事", "origin": "食品や医薬の高機能パッケージ" }],
+    "ultimate": { "name": "フォトマスク", "kind": "pierce", "pow": 1.45, "pierce": 0.22, "text": "原版が回路を決める", "origin": "半導体の回路原版で世界的地位", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4506": { "moves": [
+    { "name": "精神神経", "kind": "dot",    "rate": 0.06, "turns": 3, "text": "効くのに時間がかかる", "origin": "精神神経領域に強みを持ってきた" },
+    { "name": "再建",     "kind": "counter", "pow": 0.98, "text": "沈んでから返す", "origin": "主力薬の特許切れ後の構造改革のさなかにある" }],
+    "ultimate": { "name": "導入品頼み", "kind": "gamble", "maxMult": 2.6, "text": "外から借りた力で賭ける", "origin": "他社から導入した薬に業績を託す局面が続く", "unlock": ["earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "4523": { "moves": [
+    { "name": "認知症領域", "kind": "delay",  "pow": 2.5, "turns": 1, "text": "長い年月のあとに出る", "origin": "アルツハイマー病治療薬の開発を長く続けてきた" },
+    { "name": "hhc",        "kind": "heal",   "rate": 0.18, "text": "患者を先に考える", "origin": "ヒューマン・ヘルスケアを掲げる企業理念" }],
+    "ultimate": { "name": "レカネマブ", "kind": "finisher", "mult": 1.95, "text": "ここまで来た一手", "origin": "共同開発した認知症治療薬", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4151": { "moves": [
+    { "name": "抗体エンジニアリング", "kind": "pierce", "pow": 0.97, "pierce": 0.18, "text": "狙った標的だけを貫く", "origin": "糖鎖を改変した抗体技術に強み" },
+    { "name": "腎領域",               "kind": "regen",  "rate": 0.06, "text": "少しずつ戻す", "origin": "腎性貧血など腎疾患領域の薬を持つ" }],
+    "ultimate": { "name": "ポテリジェント", "kind": "sure", "pow": 1.35, "text": "効きを底上げする土台", "origin": "抗体の効果を高める自社の基盤技術", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "8593": { "moves": [
+    { "name": "航空機リース", "kind": "gamble", "maxMult": 2.4, "text": "空の景気に振られる", "origin": "航空機のリース事業を世界で展開する" },
+    { "name": "環境エネルギー", "kind": "regen", "rate": 0.05, "text": "長く細く入る", "origin": "再生可能エネルギー事業を育てている" }],
+    "ultimate": { "name": "資産回転", "kind": "stack", "pow": 0.78, "add": 8, "cap": 4, "text": "回すほど積み上がる", "origin": "資産を入れ替えながら利益を出す経営", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9201": { "moves": [
+    { "name": "再上場",   "kind": "counter", "pow": 0.98, "text": "一度落ちてから返す", "origin": "経営破綻から再建して再上場した歴史" },
+    { "name": "国際線",   "kind": "first",   "pow": 0.90, "text": "先に飛ぶ", "origin": "国際線ネットワークが収益の柱" }],
+    "ultimate": { "name": "燃油サーチャージ", "kind": "reflect", "ratio": 0.30, "text": "上がった分を客に回す", "origin": "燃料価格の変動を運賃に転嫁する仕組み", "unlock": ["earnings", "limitUp"] },
+    "author": "claude", "reviewed": false },
+
+  "9107": { "moves": [
+    { "name": "コンテナ持分", "kind": "drain",  "pow": 0.88, "drain": 0.35, "text": "組んだ先から取る", "origin": "3 社統合のコンテナ船会社に出資している" },
+    { "name": "自動車船",     "kind": "multi",  "pow": 0.58, "min": 2, "max": 4, "text": "積んで運ぶ", "origin": "完成車輸送船を運航する" }],
+    "ultimate": { "name": "運賃高騰", "kind": "gamble", "maxMult": 3.0, "text": "跳ねるときは、けた違いに", "origin": "海運市況の急変で利益が何倍にもなる", "unlock": ["limitUp", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9531": { "moves": [
+    { "name": "都市ガス網", "kind": "shield", "cut": 0.16, "turns": 3, "text": "止まらないことが強さ", "origin": "首都圏の都市ガス供給を担う" },
+    { "name": "LNG調達",    "kind": "gamble", "maxMult": 2.3, "text": "仕入れ次第で揺れる", "origin": "液化天然ガスの調達価格が損益を動かす" }],
+    "ultimate": { "name": "電力小売参入", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "自由化を機に電気も売るようになった", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "9503": { "moves": [
+    { "name": "送配電",   "kind": "shield", "cut": 0.16, "turns": 3, "text": "網そのものが守り", "origin": "関西の送配電網を担う" },
+    { "name": "原子力",   "kind": "delay",  "pow": 2.5, "turns": 1, "text": "動き出すまでが長い", "origin": "国内で原子力の稼働比率が高い電力会社" }],
+    "ultimate": { "name": "燃料費調整", "kind": "reflect", "ratio": 0.30, "text": "上がった分を料金に回す", "origin": "燃料価格の変動を電気料金に反映する制度", "unlock": ["earnings", "awaken"] },
+    "author": "claude", "reviewed": false },
+
+  "6532": { "moves": [
+    { "name": "コンサルタント", "kind": "sure",  "pow": 0.90, "text": "人を出せば、必ず効く", "origin": "人を送り込んで企業の変革を支援する" },
+    { "name": "稼働率",         "kind": "stack", "pow": 0.76, "add": 8, "cap": 4, "text": "埋まるほど積み上がる", "origin": "コンサルタントの稼働率が利益を決める" }],
+    "ultimate": { "name": "単価上昇", "kind": "crit", "pow": 1.35, "critAdd": 0.12, "text": "一人あたりが跳ねる", "origin": "需要逼迫で単価が上がる局面が続いた", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "3563": { "moves": [
+    { "name": "回転レーン", "kind": "multi", "pow": 0.58, "min": 3, "max": 4, "text": "次々と流れてくる", "origin": "回転寿司チェーンを中核に持つ" },
+    { "name": "原価率",     "kind": "pierce", "pow": 0.95, "pierce": 0.16, "text": "削る余地を削って通す", "origin": "高い原価率で客を呼び、回転で稼ぐ商売" }],
+    "ultimate": { "name": "海外出店", "kind": "stack", "pow": 0.80, "add": 8, "cap": 4, "text": "アジアに出すほど積み上がる", "origin": "アジアを中心に海外店舗を増やしている", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "2702": { "moves": [
+    { "name": "フランチャイズ", "kind": "regen", "rate": 0.06, "text": "店が増えるほど、細く長く", "origin": "加盟店からのロイヤリティが安定収益" },
+    { "name": "ドライブスルー", "kind": "first", "pow": 0.90, "text": "とにかく速い", "origin": "車に乗ったまま受け取れる販売形態" }],
+    "ultimate": { "name": "期間限定商品", "kind": "gamble", "maxMult": 2.4, "text": "当たれば行列", "origin": "季節ごとの限定商品が客足を大きく動かす", "unlock": ["awaken", "streak"] },
+    "author": "claude", "reviewed": false },
+
+  "7458": { "moves": [
+    { "name": "通信カラオケ", "kind": "multi", "pow": 0.58, "min": 2, "max": 4, "text": "曲を次々に送り込む", "origin": "業務用通信カラオケで高いシェア" },
+    { "name": "店舗運営",     "kind": "regen", "rate": 0.05, "text": "使われ続ける限り戻る", "origin": "カラオケ店の直営も手がける" }],
+    "ultimate": { "name": "楽曲配信の網", "kind": "stack", "pow": 0.78, "add": 8, "cap": 4, "text": "置かれた台が増えるほど積み上がる", "origin": "全国の店舗に設置した端末からの継続収入", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "4612": { "moves": [
+    { "name": "塗る",   "kind": "shield", "cut": 0.14, "turns": 3, "text": "一枚の膜が守る", "origin": "建築・自動車・船舶の塗料を手がける" },
+    { "name": "買収",   "kind": "stack",  "pow": 0.76, "add": 8, "cap": 4, "text": "買うほど積み上がる", "origin": "アジア・豪州で買収を重ねて規模を広げた" }],
+    "ultimate": { "name": "MAP", "kind": "drain", "pow": 1.40, "drain": 0.40, "text": "任せて、増やして、取る", "origin": "自律・分権で現地に任せる独自の経営方式", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false },
+
+  "5334": { "moves": [
+    { "name": "スパークプラグ", "kind": "crit", "pow": 0.94, "critAdd": 0.11, "text": "一点の火花で始まる", "origin": "自動車用点火プラグで世界首位級" },
+    { "name": "酸素センサー",   "kind": "sure", "pow": 0.88, "text": "測って、外さない", "origin": "排ガスを測るセンサーでも高シェア" }],
+    "ultimate": { "name": "脱・内燃機関", "kind": "swap", "text": "攻めと守りを入れ替える", "origin": "電動化で主力製品が要らなくなる前に事業を組み替える挑戦", "unlock": ["awaken", "earnings"] },
+    "author": "claude", "reviewed": false }
+ }
+}

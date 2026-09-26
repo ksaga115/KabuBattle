@@ -1,0 +1,34 @@
+{
+ "schemaVersion": 1,
+ "code": "3904",
+ "source": "yahoo-fundamentals",
+ "updatedAt": "2026-09-26",
+ "ttm": {
+  "fiscalId": "2026-06-30",
+  "sales": 21477973000,
+  "op": 1189602000,
+  "ni": 540388000,
+  "opIsPretax": false,
+  "assets": 13556744000,
+  "equity": 5797747000,
+  "eqRatio": 0.4276651532255828,
+  "cash": 5250215000,
+  "shares": 15408534,
+  "eps": 35.070695239404344,
+  "bps": 376.26856649698146,
+  "div": 3.9,
+  "salesGrowth": 0.20127603273691252,
+  "opmStd": 0.018862203611359596,
+  "sources": {
+   "salesGrowth": "年次の前年比",
+   "opmStd": "年次",
+   "TotalRevenue": "trailing",
+   "OperatingIncome": "trailing",
+   "NetIncome": "trailing",
+   "TotalAssets": "quarterly",
+   "StockholdersEquity": "quarterly",
+   "CashAndCashEquivalents": "quarterly",
+   "OrdinarySharesNumber": "quarterly"
+  }
+ }
+}

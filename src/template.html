@@ -210,6 +210,10 @@ function loadStore() {
         if (units > 0) {
           s.holdings[c] = { units: units, cost: Math.max(0, num(h.cost, 0)) };
           if (isFinite(num(h.last, NaN))) s.holdings[c].last = num(h.last);
+          // 練度のもと（設計書 §15）。精算した日にしか増えないので、
+          // 書き換えても「遊んだ日数」を超えた分は masteryOf が切り捨てる
+          s.holdings[c].held = Math.max(0, num(h.held, 0));
+          if (typeof h.since === "string") s.holdings[c].since = h.since;
         }
       }
     }
@@ -340,6 +344,30 @@ function baseOf(code, day) {
     date: d.date, mcapTop10: !!top10[code]
   });
   return bakeOver(b, st);
+}
+
+/**
+ * その銘柄の練度（設計書 §15）。保有した営業日数から決まる。
+ * 「これまでに精算した日数」を超える保有はあり得ないので、そこで頭を打たせる。
+ * セーブを書き換えても、遊んでいない日数ぶんの練度は付かない。
+ */
+function masteryOf(code) {
+  var hd = store.holdings[code];
+  if (!hd) return 0;
+  return KB.masteryOf(num(hd.held), num(store.stats.days));
+}
+
+/**
+ * 3 体まとめて組む。ポートフォリオ（隊のベータと値動きの相関・設計書 §15）は
+ * 3 体そろって初めて決まるので、いったん組んでから相関を測り、もう一度組み直す。
+ * 素体は latest.json に焼き込み済みなので、2 度組んでも重くない。
+ */
+function buildParty(codes, day, extrasByCode) {
+  var ex = extrasByCode || {};
+  var first = codes.map(function (c) { return todayOf(c, day, Object.assign({}, ex[c] || {})); });
+  if (first.some(function (b) { return !b; })) return first;
+  var pf = KB.portfolio(first);
+  return codes.map(function (c) { return todayOf(c, day, Object.assign({}, ex[c] || {}, { portfolio: pf })); });
 }
 
 /** 今日のその銘柄（素体 × 状態係数）。予想の当たり外れも効かせる */
@@ -926,7 +954,8 @@ function viewParty() {
       var b = todayOf(code);
       h.push('<div class="slot filled">' + avatarSvg(b) +
         '<div style="min-width:0;flex:1"><div><b>' + esc(stockOf(code).short) + '</b> <span class="' + elClass(b.elem) + '">' + b.element.name + '</span></div>' +
-        '<div class="small muted">' + b.kabu.rareRank + ' ／ 体力' + b.kabu.hp + '</div></div>' +
+        '<div class="small muted">' + b.kabu.rareRank + ' ／ 体力' + b.kabu.hp +
+        (masteryOf(code) ? ' ／ <span class="tag on">練度' + masteryOf(code) + '</span>' : "") + '</div></div>' +
         '<button class="sm" data-unslot="' + i + '">外す</button></div>');
     } else {
       h.push('<div class="slot"><span class="faint">空き</span></div>');
@@ -936,14 +965,32 @@ function viewParty() {
   h.push('</div>');
 
   if (partyReady() === 3) {
-    var sq = KB.squadOf(store.party.map(function (c) { return todayOf(c); }));
+    var mine3 = buildParty(store.party, null, {});
+    var sq = KB.squadOf(mine3);
     var aura = CB.squadAura(sq.beasts.map(function (b) { return b.trait.key; }), sq.reso);
     var elems = sq.beasts.map(function (b) { return b.element.name; });
-    h.push('<div class="row small" style="margin-top:12px"><span class="muted">属性</span>' +
+    var pf = sq.portfolio;
+    var nk = num((D.latest.market || {}).nk225Chg);
+
+    // 相性（五行の散らばり）
+    h.push('<div class="row small" style="margin-top:12px"><span class="muted">五行</span>' +
       sq.beasts.map(function (b) { return '<span class="' + elClass(b.elem) + '">' + b.element.name + '</span>'; }).join("") +
-      (new Set(elems).size >= 3 ? '<span class="tag on">分散の共鳴</span>' : "") +
-      (new Set(elems).size === 1 ? '<span class="tag on">集中投資の共鳴</span>' : "") +
+      (new Set(elems).size >= 3 ? '<span class="tag on">輪を覆えている</span>' : '<span class="tag">' + (new Set(elems).size) + ' 属性しか覆えていない</span>') +
       (aura.synergies.length ? aura.synergies.map(function (s) { return '<span class="tag on">' + esc(s) + '</span>'; }).join("") : "") +
+      '</div>');
+
+    // ポートフォリオ（設計書 §15）。ここが「全部そろえた後も毎日考えること」
+    h.push('<div class="row small" style="margin-top:8px"><span class="muted">値動き</span>' +
+      '<span>隊のベータ <b class="num">' + pf.beta.toFixed(2) + '</b></span>' +
+      '<span>3 体の相関 <b class="num">' + pf.corr.toFixed(2) + '</b></span>' +
+      (pf.diversified ? '<span class="tag on">分散の共鳴（被ダメ −5%）</span>' : "") +
+      (pf.concentrated ? '<span class="tag on">集中投資（攻 +6% 被ダメ +5%）</span>' : "") +
+      '</div>');
+    h.push('<div class="muted small" style="margin-top:6px">' +
+      'ベータは日経平均への感応度です。高いほど暴落の日に深く沈み、祭りの日に大きく乗ります。' +
+      '相関は 3 体の値動きがどれだけ連動するか。低いほど一緒には沈みません。' +
+      (nk <= -0.03 ? '<b class="down"> 今日は暴落の日。低ベータの隊が耐えます。</b>' :
+        nk >= 0.03 ? '<b class="up"> 今日は祭りの日。高ベータの隊が伸びます。</b>' : '') +
       '</div>');
   } else {
     h.push('<div class="muted small" style="margin-top:12px">3 体そろうと対戦できます。</div>');
@@ -1103,6 +1150,29 @@ function showStock(code) {
     (today.kabu.tags.length ? today.kabu.tags.map(function (t) { return '<span class="tag on">' + esc(t) + '</span>'; }).join(" ")
       : '<span class="faint">今日は特に何も起きていません（素体のまま戦います）</span>') + '</div>');
 
+  // 気質（設計書 §15）。日足 1 年から計算した、その銘柄の性格
+  var tq = st.tech;
+  if (tq) {
+    h.push('<h3 style="margin-top:14px">気質</h3>' +
+      '<div class="muted small">過去 1 年の値動きから決まります。決算より速く、株価より遅く変わります。</div>');
+    var volLabel = tq.vol >= 0.60 ? "とても荒い" : tq.vol >= 0.40 ? "荒い" : tq.vol >= 0.25 ? "並" : "穏やか";
+    var betaLabel = tq.beta >= 1.0 ? "相場に大きく振られる" : tq.beta >= 0.5 ? "相場について行く" :
+      tq.beta >= 0.1 ? "相場と関係が薄い" : "相場と逆に動くことがある";
+    var acLabel = tq.autocorr >= 0.08 ? "勢いが続く（モメンタム）" : tq.autocorr <= -0.08 ? "行き過ぎたら戻る（平均回帰）" : "どちらでもない";
+    h.push('<div class="row small" style="margin-top:6px">' +
+      '<span>値動きの荒さ <b class="num">' + (num(tq.vol) * 100).toFixed(0) + '%</b> <span class="muted">' + volLabel + '</span></span>' +
+      '<span>ベータ <b class="num">' + num(tq.beta).toFixed(2) + '</b> <span class="muted">' + betaLabel + '</span></span>' +
+      '</div>');
+    h.push('<div class="row small" style="margin-top:4px">' +
+      '<span>クセ <span class="muted">' + acLabel + '</span></span>' +
+      '<span>最大下落 <span class="down num">' + pct(tq.mdd, 0) + '</span>（高値の ' + (num(tq.recovery) * 100).toFixed(0) + '% まで回復）</span>' +
+      '<span>売買代金 <b class="num">' + (num(tq.turnover) / 1e8).toFixed(2) + '</b> 億円/日</span>' +
+      '</div>');
+    h.push('<div class="faint small" style="margin-top:4px">' +
+      '荒い銘柄は運寄り（一撃は大きいが外す）、穏やかな銘柄は技寄り（淡々と当てる）。' +
+      'ベータが高いほど暴落の日・祭りの日をまともに受けます。売買代金が厚いほど先に動けます。</div>');
+  }
+
   // 技
   h.push('<h3 style="margin-top:14px">技</h3>');
   today.moves.forEach(function (m) {
@@ -1120,10 +1190,18 @@ function showStock(code) {
   h.push('<h3 style="margin-top:14px">契約</h3>');
   if (hd) {
     var pl = (num(st.close) - hd.cost) * UNIT * hd.units;
+    var mst = masteryOf(code);
     h.push('<div class="row small"><span>' + units(hd.units) + ' 口（' + units(hd.units * UNIT) + ' 株）</span>' +
       '<span>取得単価 ' + yen(hd.cost) + ' 円</span>' +
       '<span>評価額 ' + yen(num(st.close) * UNIT * hd.units) + ' 円</span>' +
       '<span class="' + cls(pl) + '">評価損益 ' + (pl >= 0 ? "+" : "") + yen(pl) + ' 円</span></div>');
+    h.push('<div class="row small" style="margin-top:4px">' +
+      '<span>保有 ' + units(num(hd.held)) + ' 営業日' + (hd.since ? '（' + esc(hd.since) + ' から）' : "") + '</span>' +
+      '<span class="' + (mst ? "tag on" : "tag") + '">練度 ' + mst + ' / ' + KB.MASTERY_MAX + '</span>' +
+      '<span class="faint">ダメージの振れが ' + (mst * 2) + '% 縮んでいます</span></div>');
+    h.push('<div class="faint small" style="margin-top:4px">' +
+      '長く持つほど戦い方が安定します（現実の時間分散と同じで、素のステータスは上がりません）。' +
+      '手放すと練度は消えます。</div>');
   } else h.push('<div class="muted small">契約していません。</div>');
   h.push('<div class="row" style="margin-top:8px">' +
     (u.listed === false ? '<span class="muted small">上場廃止のため契約できません。</span>' :
@@ -1328,17 +1406,18 @@ function settleOneDay(day, notes) {
   if (hits === store.party.length && hits > 0) gain += PREDICT_BONUS;   // パーティ全的中のボーナス
 
   // 自軍と、その日の相場そのものである敵軍
-  var mine = store.party.map(function (c) { return todayOf(c, day, extras[c] || {}); });
+  var mine = buildParty(store.party, day, extras);
   var p = KB.protagonists(day);
   var foeCodes = [p.up, p.hot, p.down].filter(Boolean);
   while (foeCodes.length < 3) foeCodes.push(foeCodes[0]);
   var myRare = mine.reduce(function (s, b) { return s + b.kabu.rare; }, 0) / mine.length;
-  var foes = foeCodes.slice(0, 3).map(function (c) {
-    var b = todayOf(c, day, {});
+  var foes = buildParty(foeCodes.slice(0, 3), day, {}).map(function (b) {
     return KB.scaleToParty(b, myRare, b.kabu.rare);
   });
 
-  var sqA = KB.squadOf(mine), sqB = KB.squadOf(foes);
+  // 練度（設計書 §15）。長く持っているほどダメージの振れが縮む＝時間分散。
+  // 相手（その日の相場）は誰も保有していないので練度 0。
+  var sqA = KB.squadOf(mine, store.party.map(masteryOf)), sqB = KB.squadOf(foes);
   var res = CB.squadMatch(sqA, sqB, KB.hashStr(date));
   var win = res.scoreA > res.scoreB;
 
@@ -1348,6 +1427,11 @@ function settleOneDay(day, notes) {
 
   store.cash += gain;
   store.stats.days++;
+  // 練度のもと（設計書 §15）。精算した日に、そのとき持っていた銘柄だけ 1 日ぶん増える。
+  // 「持っていた日数」なので、売って買い直すとその間は積まれない。
+  Object.keys(store.holdings).forEach(function (c) {
+    store.holdings[c].held = num(store.holdings[c].held) + 1;
+  });
   store.stats.hits += hits; store.stats.misses += misses;
   if (win) { store.stats.wins++; store.stats.streak++; store.stats.best = Math.max(store.stats.best, store.stats.streak); }
   else { store.stats.losses++; store.stats.streak = 0; }
@@ -1457,7 +1541,7 @@ function buy(code) {
     hd.cost = (hd.cost * hd.units + num(st.close)) / (hd.units + 1);
     hd.units += 1;
     hd.last = num(st.close);
-  } else store.holdings[code] = { units: 1, cost: num(st.close), last: num(st.close) };
+  } else store.holdings[code] = { units: 1, cost: num(st.close), last: num(st.close), held: 0, since: D.latest.date };
   // 空きがあればパーティにも入れる
   var i = store.party.indexOf("");
   if (i >= 0 && store.party.indexOf(code) < 0) store.party[i] = code;

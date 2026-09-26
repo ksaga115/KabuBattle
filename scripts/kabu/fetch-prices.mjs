@@ -64,6 +64,81 @@ function median(a) {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 }
 
+// ══════════════ 気質（テクニカル）設計書 §15 ══════════════
+// 日足 1 年から計算できる、実在のテクニカル指標。追加の通信は要らない（すでに 1 年ぶん取っている）。
+// 実測での散らばり（120 銘柄）:
+//   ヒストリカル・ボラティリティ  10.9% 〜 122.3%（11 倍）
+//   ベータ                        -0.23 〜 1.34（市場と逆に動く銘柄まである）
+//   自己相関                      -0.30（平均回帰）〜 +0.26（モメンタム）
+//   最大ドローダウン              -12.8% 〜 -45.2%
+//   売買代金                      0.04 億 〜 31 億円/日（776 倍）
+// 決算（四半期）より速く、株価（毎日）より遅い ＝ その銘柄の「性格」。
+
+const meanOf = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
+const sdOf = (a) => { const m = meanOf(a); return Math.sqrt(meanOf(a.map((x) => (x - m) ** 2))); };
+
+/** 日足 → 対数リターンの系列（日付つき。市場と突き合わせるため） */
+export function returnsOf(rows) {
+  const out = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i - 1].close > 0 && rows[i].close > 0) out.push({ date: rows[i].date, r: Math.log(rows[i].close / rows[i - 1].close) });
+  }
+  return out;
+}
+
+/**
+ * @param {Array} rows      日足（日付昇順）
+ * @param {Map}   marketRet 日付 → 日経平均の対数リターン
+ */
+export function technicals(rows, marketRet) {
+  if (!rows || rows.length < 40) return null;
+  const ret = returnsOf(rows);
+  if (ret.length < 40) return null;
+  const rs = ret.map((x) => x.r);
+
+  // ヒストリカル・ボラティリティ（年率）。ダメージの振れ幅に効く
+  const vol = sdOf(rs) * Math.sqrt(250);
+
+  // ベータ（日経平均への感応度）。暴落の日・祭りの日の受け方が銘柄ごとに変わる
+  let beta = 1, corr = 0;
+  if (marketRet && marketRet.size) {
+    const a = [], b = [];
+    for (const x of ret) { const m = marketRet.get(x.date); if (m != null) { a.push(x.r); b.push(m); } }
+    if (a.length >= 30) {
+      const ma = meanOf(a), mb = meanOf(b);
+      let cov = 0, varm = 0;
+      for (let i = 0; i < a.length; i++) { cov += (a[i] - ma) * (b[i] - mb); varm += (b[i] - mb) ** 2; }
+      beta = varm > 0 ? cov / varm : 1;
+      const sa = sdOf(a), sb = sdOf(b);
+      corr = sa > 0 && sb > 0 ? (cov / a.length) / (sa * sb) : 0;
+    }
+  }
+
+  // 自己相関（1 日ラグ）。正＝勢いが続く（モメンタム）、負＝行き過ぎたら戻る（平均回帰）
+  let autocorr = 0;
+  {
+    const x = rs.slice(0, -1), y = rs.slice(1);
+    const mx = meanOf(x), my = meanOf(y);
+    let s = 0, sx = 0, sy = 0;
+    for (let i = 0; i < x.length; i++) { s += (x[i] - mx) * (y[i] - my); sx += (x[i] - mx) ** 2; sy += (y[i] - my) ** 2; }
+    autocorr = sx > 0 && sy > 0 ? s / Math.sqrt(sx * sy) : 0;
+  }
+
+  // 最大ドローダウンと、そこから戻せているか
+  let peak = -Infinity, mdd = 0;
+  for (const r of rows) { peak = Math.max(peak, r.close); mdd = Math.min(mdd, r.close / peak - 1); }
+  const recovery = peak > 0 ? rows[rows.length - 1].close / peak : 1;   // 1 に近いほど高値圏まで戻している
+
+  // 売買代金（流動性）。薄い銘柄は動きが鈍い
+  const turnover = meanOf(rows.slice(-60).map((r) => r.close * r.volume));
+
+  return {
+    vol: round4(vol), beta: round2(beta), corr: round2(corr),
+    autocorr: round2(autocorr), mdd: round4(mdd), recovery: round4(recovery),
+    turnover: Math.round(turnover)
+  };
+}
+
 /**
  * 日足の系列から「今日の状態」を作る。設計書 §5 の派生値をすべてここで確定させる。
  * @param {Array} rows 日付昇順の日足
@@ -358,12 +433,14 @@ async function main() {
 
   // 日経平均（暴落の日・祭りの日の判定）。これが取れないと市場全体のイベントが出せないが、
   // 銘柄側は取れるので致命ではない（nk225Chg = 0 として続ける）。
-  let nk = null;
+  // 1 年ぶん取るのは、ベータ（日経への感応度）を銘柄ごとに出すため（§15 の気質）。
+  let nk = null, marketRet = new Map();
   try {
-    nk = await source.fetchDaily(NK225_SYMBOL, { range: "3mo" });
-    console.log(`[prices] 日経平均 ${nk.rows.length} 営業日ぶん`);
+    nk = await source.fetchDaily(NK225_SYMBOL, { range: "1y" });
+    for (const x of returnsOf(nk.rows)) marketRet.set(x.date, x.r);
+    console.log(`[prices] 日経平均 ${nk.rows.length} 営業日ぶん（ベータの基準に ${marketRet.size} 日を使います）`);
   } catch (e) {
-    console.log(`[prices] 日経平均が取れません（${e.message}）— nk225Chg は 0 として続けます`);
+    console.log(`[prices] 日経平均が取れません（${e.message}）— nk225Chg は 0、ベータは 1 として続けます`);
   }
 
   const results = await pool(codes, conc, async (code) => {
@@ -409,7 +486,7 @@ async function main() {
   const droppedSplits = [];
   const unusable = [];
   const badMcap = [];
-  let staleCount = 0, suspectCount = 0;
+  let staleCount = 0, suspectCount = 0, techCount = 0;
 
   for (const r of results) {
     const code = r.code;
@@ -432,6 +509,11 @@ async function main() {
       if (before) { stocks[code] = Object.assign({}, before, { stale: (Number(before.stale) || 0) + 1 }); staleCount++; }
       continue;
     }
+
+    // 気質（§15）。日足 1 年から計算するので追加の通信は無い。
+    // 上場直後などで日足が足りない銘柄は付かない（その場合ゲーム側は標準の気質として扱う）。
+    const tech = technicals(r.data.rows, marketRet);
+    if (tech) { st.tech = tech; techCount++; }
 
     const short = universe.stocks[code] ? universe.stocks[code].short : "";
 
@@ -601,6 +683,7 @@ async function main() {
     for (const d of droppedSplits.slice(0, 10)) console.log(`    ${d}`);
     if (droppedSplits.length > 10) console.log(`    …他 ${droppedSplits.length - 10} 件`);
   }
+  console.log(`[prices] 気質（ボラ・ベータ・自己相関・最大DD・売買代金）を付けた銘柄 ${techCount} 件`);
   if (staleCount) console.log(`[prices] 前回値を引き継いだ銘柄 ${staleCount} 件`);
   if (suspectCount) console.log(`[prices] 異常値として退けた銘柄 ${suspectCount} 件`);
 

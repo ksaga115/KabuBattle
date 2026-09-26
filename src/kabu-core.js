@@ -183,7 +183,10 @@ const KB = (function () {
     { key: "regen", test: (f) => f.divYield >= 0.035, why: "配当利回り 3.5% 以上（株主還元）" },
     { key: "luck", test: (f) => f.opmStd >= 0.06, why: "直近 4 期の利益のブレが大きい（業績が読めない）" },
     { key: "focus", test: (f) => f.turnover >= 1.5, why: "総資産回転率 1.5 以上（身軽）" },
-    { key: "serene", test: (f) => f.mcapTop10, why: "時価総額 上位 10（大御所）" }
+    { key: "serene", test: (f) => f.mcapTop10, why: "時価総額 上位 10（大御所）" },
+    // 気質（§15）から。3 割以上の下落を経験して、なお高値圏の 9 割まで戻している銘柄。
+    // 「一度沈んだが立て直した」という事実がそのまま不屈になる。
+    { key: "endure", test: (f) => f.mdd <= -0.30 && f.recovery >= 0.90, why: "3 割超の下落から高値圏まで戻した（不屈）" }
   ];
 
   // どの条件にも当たらなかった銘柄の予備。いつも同じ特性になると図鑑が単調になるので、
@@ -208,7 +211,10 @@ const KB = (function () {
       divYield: num(s.close) > 0 ? num(f.div) / num(s.close) : 0,
       opmStd: num(f.opmStd),
       turnover: num(f.assets) > 0 ? sales / num(f.assets) : 0,
-      mcapTop10: !!o.mcapTop10
+      mcapTop10: !!o.mcapTop10,
+      // 気質（§15）。日足 1 年から計算した事実
+      mdd: num((s.tech || {}).mdd),
+      recovery: num((s.tech || {}).recovery, 1)
     };
     const notes = [];
     for (const r of TRAIT_RULES) {
@@ -466,7 +472,9 @@ const KB = (function () {
         sector33: normSector(u.sector33), short: String(u.short || name),
         traitKeys: tr.keys, traitNotes: tr.notes,
         provisional: !fin, date: date,
-        stale: num(state.stale), suspect: !!state.suspect
+        stale: num(state.stale), suspect: !!state.suspect,
+        // 気質（§15）。図鑑に出すほか、隊のベータ・相関の計算に使う
+        tech: state.tech || null
       }
     };
   }
@@ -495,6 +503,31 @@ const KB = (function () {
 
     const chg1 = num(s.chg1), ytdPos = num(s.ytdPos, 0.5), chgYtd = num(s.chgYtd);
     const volRatio = num(s.volRatio, 1), range = num(s.range), dev25 = num(s.dev25);
+
+    // ══ 気質（テクニカル・設計書 §15）══
+    // 日足 1 年から計算した、その銘柄の性格。決算より速く、株価より遅く変わる。
+    // すべて公開データだけで決まる（セーブを書き換えても動かない）。
+    const tech = s.tech || null;
+    if (tech) {
+      // ボラティリティ: 高いほど「一発はあるが外す」＝運寄り、低いほど「淡々と当てる」＝技寄り。
+      // CB は振れ幅を運と技から決める（spread = 0.17 × (1 + 運/100×0.95 − 技/100×0.70)）ので、
+      // 運と技を傾けることが、そのまま実在のボラティリティの再現になる。
+      const volTilt = clamp((num(tech.vol, 0.30) - 0.30) / 0.60, -0.5, 1.0);
+      mods.LUK *= 1 + volTilt * 0.25;
+      mods.TEC *= 1 - volTilt * 0.20;
+      if (volTilt >= 0.5) tag("荒い値動き"); else if (volTilt <= -0.3) tag("穏やかな値動き");
+
+      // 自己相関: 正＝勢いが続く（モメンタム）、負＝行き過ぎたら戻る（平均回帰）。
+      // 前日の動きに対して、その銘柄の性格どおりの向きへ効く。
+      const follow = clamp(num(tech.autocorr) * 4, -1, 1);
+      mods.ATK *= 1 + clamp(chg1, -0.08, 0.08) * follow * 2;
+      if (follow <= -0.4) {
+        if (chg1 <= -0.02) { mods.critAdd += 0.05 * -follow; tag("押し目からの反発"); }
+      } else if (follow >= 0.4 && chg1 >= 0.02) tag("勢いが続く");
+
+      // 売買代金（流動性）: 厚い銘柄ほど動き出しが速い。0.04 億〜31 億で ±9 ほど振れる
+      mods.order += clamp(Math.log10(Math.max(1, num(tech.turnover)) / 1e8) * 6, -12, 12);
+    }
 
     // テンション: 上げた日は攻寄り、下げた日は守寄り（合計は概ね保存＝強弱ではなく配分）
     const t = clamp(chg1, -0.08, 0.08);
@@ -525,9 +558,20 @@ const KB = (function () {
     if (s.limitUp) { mods.unlocked.limitUp = true; mods.critAdd += 0.10; tag("ストップ高"); }
     if (s.limitDown) { mods.stunFirst = true; tag("ストップ安"); }
 
+    // 市場全体のイベントは **ベータ（日経への感応度）倍**で効く。設計書 §5.1 は全員一律 ×0.9 /
+    // ×1.05 としていたが、実際には銘柄ごとに市場への付き合い方がまったく違う
+    // （実測で -0.23 〜 1.34。市場と逆に動く銘柄すらある）。ここが「今日の相場に合わせて
+    // 誰を出すか」という毎日の判断の土台になる（§15 のポートフォリオ層）。
+    const beta = tech ? clamp(num(tech.beta, 1), -0.5, 2) : 1;
     const nk = num(m.nk225Chg);
-    if (nk <= -0.03) { mods.DEF *= 0.90; tag("暴落の日"); }
-    if (nk >= 0.03) { mods.ATK *= 1.05; tag("祭りの日"); }
+    if (nk <= -0.03) {
+      mods.DEF *= 1 - 0.10 * beta;
+      tag(beta >= 0.8 ? "暴落の日（まともに食らう）" : beta <= 0.2 ? "暴落の日（我関せず）" : "暴落の日");
+    }
+    if (nk >= 0.03) {
+      mods.ATK *= 1 + 0.05 * beta;
+      tag(beta >= 0.8 ? "祭りの日（波に乗る）" : beta <= 0.2 ? "祭りの日（乗り遅れ）" : "祭りの日");
+    }
 
     if (x.earnings) { mods.unlocked.earnings = true; tag("決算日"); }
     if (x.exDiv) { mods.hpMul *= (1 - clamp(num(x.divYield) * 2, 0, 0.10)); tag("配当落ち"); }
@@ -536,6 +580,13 @@ const KB = (function () {
     // 予想（設計書 §7.3）
     if (x.hit === true) { mods.critAdd += 0.06; tag("予想的中"); }
     if (x.hit === false) { mods.order -= 15; tag("予想外れ"); }
+
+    // ポートフォリオ（設計書 §7.2・§15）。値動きが連動しない 3 体は被ダメが減り、
+    // 連動する 3 体は攻めが立つ代わりに一緒に沈む。現実の分散投資と集中投資そのまま。
+    if (x.portfolio) {
+      if (x.portfolio.diversified) { mods.takenMul *= 0.95; tag("分散（値動きが連動しない）"); }
+      if (x.portfolio.concentrated) { mods.ATK *= 1.06; mods.takenMul *= 1.05; tag("集中投資"); }
+    }
 
     for (const k of CB.STAT_KEYS) mods[k] = clamp(mods[k], MOD_LO, MOD_HI);
     mods.hpMul = clamp(mods.hpMul, MOD_LO, MOD_HI);
@@ -639,16 +690,81 @@ const KB = (function () {
     return { units: num(h.units) * r, cost: num(h.cost) / r };
   }
 
+  // ══════════════ ポートフォリオ（設計書 §15）══════════════
+  // 現実の分散投資は「業種が違う」ことではなく「値動きが連動しない」こと。
+  // 3 体ぶんの日次リターンをゲームに持たせるのは重すぎる（3,700 銘柄 × 250 日）ので、
+  // 実在の一ファクターモデルで見積もる: 2 銘柄の相関 ≒（それぞれの市場との相関の積）。
+  // 同じ業種どうしはそれに加えて連動するので、その分を足す。
+  // 使うのは latest.json に焼いた corr と業種だけなので、セーブとは無関係に決まる。
+  const SAME_SECTOR_RHO = 0.30, SAME_ELEM_RHO = 0.10;
+
+  function pairCorr(a, b) {
+    const ta = (a.kabu && a.kabu.tech) || null, tb = (b.kabu && b.kabu.tech) || null;
+    // 気質が無い銘柄（上場直後など）は市場並みに連動するものとして扱う
+    let rho = num(ta ? ta.corr : 0.35, 0.35) * num(tb ? tb.corr : 0.35, 0.35);
+    if (a.kabu.sector33 && a.kabu.sector33 === b.kabu.sector33) rho += SAME_SECTOR_RHO;
+    else if (a.elem === b.elem) rho += SAME_ELEM_RHO;
+    return clamp(rho, -1, 1);
+  }
+
+  /**
+   * 隊の性質。設計書 §7.2 の共鳴を、属性の散らばり（相性の話）と
+   * 値動きの相関（分散の話）の 2 本立てにする。
+   * @returns {{beta:number, corr:number, diversified:boolean, concentrated:boolean, elems:number}}
+   */
+  function portfolio(beasts) {
+    const list = (beasts || []).filter(Boolean);
+    if (list.length < 2) return { beta: 1, corr: 0.35, diversified: false, concentrated: false, elems: list.length };
+    let bs = 0;
+    for (const b of list) bs += num((b.kabu && b.kabu.tech) ? b.kabu.tech.beta : 1, 1);
+    let sum = 0, n = 0;
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) { sum += pairCorr(list[i], list[j]); n++; }
+    const corr = n ? sum / n : 0.35;
+    const elems = new Set(list.map((b) => b.elem)).size;
+    return {
+      beta: bs / list.length,
+      corr: corr,
+      diversified: corr <= 0.15,      // 値動きが連動していない＝本当の分散
+      concentrated: corr >= 0.45,     // 連動している＝集中投資
+      elems: elems
+    };
+  }
+
+  // ══════════════ 練度（保有の履歴・設計書 §15）══════════════
+  // 現実の「長く持つほど成績のブレが縮む（時間分散）」を、そのまま持ち込む。
+  // CB には熟練度（mastery 0〜5）があり、効果は「その個体のダメージの振れを 2%/段、
+  // 最大 −10% 縮める。素のステータスは上げない」。まさに時間分散そのものなので、
+  // 保有した営業日数をここに繋ぐ。エンジンの改修は要らない。
+  //
+  // 素のステータスを上げないので、いくら持ち続けても弱い銘柄が強い銘柄を追い越すことはない
+  // （設計書 §0 の「Pay-to-win なし」と同じ考え方）。伸びるのは「安定して戦えること」だけ。
+  const MASTERY_MAX = 5;
+
+  /**
+   * 保有営業日数 → 練度。BarcodeTool の熟練度と同じ刻み（log2）。
+   * @param {number} heldDays  その銘柄を保有した営業日数
+   * @param {number} playedDays これまでに精算した営業日数（これを超える保有はあり得ない）
+   */
+  function masteryOf(heldDays, playedDays) {
+    const d = Math.max(0, Math.min(num(heldDays), num(playedDays, heldDays)));
+    return clamp(Math.floor(Math.log2(d + 1)), 0, MASTERY_MAX);
+  }
+
   // ══════════════ パーティ（CB の squad 形）══════════════
-  /** 属性がばらけると共鳴（設計書 §7.2）。CB.squadAura の reso に渡す形に寄せる */
-  function squadOf(beasts) {
+  /**
+   * 属性がばらけると相性の共鳴（設計書 §7.2）。CB.squadAura の reso に渡す形に寄せる。
+   * @param {Array} beasts
+   * @param {number[]} [mastery] 3 体それぞれの練度（0〜5）。省略すると 0
+   */
+  function squadOf(beasts, mastery) {
     const elems = beasts.map((b) => b.elem);
     const uniq = new Set(elems).size;
     return {
       beasts: beasts,
-      mastery: beasts.map(() => 0),
+      mastery: beasts.map((_, i) => clamp(num(mastery && mastery[i]), 0, MASTERY_MAX)),
       reso: { family: uniq === 1, session: false },
-      spread: uniq >= 3
+      spread: uniq >= 3,
+      portfolio: portfolio(beasts)
     };
   }
 
@@ -671,6 +787,8 @@ const KB = (function () {
     // 分割・併合
     SPLIT_RATIOS: SPLIT_RATIOS, detectSplit: detectSplit, adjustHolding: adjustHolding,
     // 対戦
-    protagonists: protagonists, MIN_MCAP: MIN_MCAP, scaleToParty: scaleToParty, squadOf: squadOf
+    protagonists: protagonists, MIN_MCAP: MIN_MCAP, scaleToParty: scaleToParty, squadOf: squadOf,
+    // ポートフォリオ・練度（§15）
+    portfolio: portfolio, pairCorr: pairCorr, masteryOf: masteryOf, MASTERY_MAX: MASTERY_MAX
   };
 })();

@@ -1,26 +1,75 @@
 # 株バトル（KabuBattle）
 
-日本株（まず日経 225）の **決算 → 素体**、**株価の動き → 日々の状態**、**事業・技術 → 技** でキャラクターを組み立て、
+日本株の **決算 → 素体**、**株価の動き → 日々の状態**、**事業・技術 → 技** でキャラクターを組み立て、
 [BarcodeTool](https://github.com/ksaga115/BarcodeTool) の「コードバトル」エンジンで戦わせるゲーム。
 契約金は株価、手放すと時価で戻る。毎朝の予想がバフになり、夕方に「その日の相場そのもの」が敵として現れる。
 
-- 設計書: [`docs/設計書.md`](./docs/設計書.md)（長期運用前提。データの流れ・ID・保存形式・移行手順を先に固定）
-- 状態: 設計承認済み。実装は M1（銘柄マスタ・技の初版・GitHub Actions）から着手予定
+- 設計書: [`docs/設計書.md`](./docs/設計書.md)（データの流れ・ID・保存形式・移行手順。§14 に実装で変えた点）
 - 公開 URL（予定）: https://ksaga115.github.io/KabuBattle/
+- 状態: **遊べます**。東証に上場している内国株式すべて（3,700 銘柄）・実データ入り。
+  M1〜M2、予想・シーズン・称号（M5）、上場廃止・分割・年次アーカイブ（§8）まで実装済み。
+  未着手は決算日ボス（§9.3）とキャラ画像の生成（M4。いまは手続き生成の SVG）。
 
-## 構成（予定）
+## 遊びかた（手元で）
+
+ゲームは `kabu/*.json` を読むので、`index.html` をファイルとして直接開くとブラウザの制限で読み込めません。
+
+```
+node scripts/serve.mjs      # → http://127.0.0.1:8787/
+```
+
+資金 30 万円から始めて、「市場」で銘柄と契約し、「編成」で 3 体（前衛・中衛・後衛）を並べ、
+「トップ」の精算ボタンで対戦します。セーブはこの端末の中だけ（localStorage）で、書き出し・読み込みができます。
+
+## 構成
 
 | パス | 役割 |
 |---|---|
-| `index.html` | ゲーム本体（単一 HTML。静的 JSON を読むだけ） |
-| `kabu/universe.json` | 銘柄マスタ（コード・社名・33 業種・属性・所属指数・上場状態） |
-| `kabu/moves.json` | 技データ（業種技・固有技・必殺技。`origin` に元ネタの一言） |
-| `kabu/art/` | キャラ画像（1 銘柄 1 枚、生成は一度きり） |
-| `kabu/data/latest.json` | 今日の状態スナップショット（GitHub Actions が平日 16:30 JST に更新） |
-| `kabu/data/fin/` | 決算（J-Quants、週次） |
+| `index.html` | ゲーム本体（単一 HTML。ビルド生成物なので直接編集しない） |
+| `src/template.html` | 画面と進行。`index.html` のもと |
+| `src/kabu-core.js` | 中核。決算・株価・事業 → 対戦エンジンが食える個体に翻訳する（`KB`） |
+| `vendor/BarcodeTool.commit` | 対戦エンジンの流用元コミットと sha256 |
+| `kabu/universe.json` | 銘柄マスタ（コード・社名・33 業種・属性・市場/規模区分・上場状態。1 銘柄 1 行） |
+| `kabu/moves.json` | 技データ（33 業種の業種技＋主要銘柄の固有技 2 つと必殺技。`origin` に元ネタの一言） |
+| `kabu/data/latest.json` | 今日の状態スナップショット（ゲームはこれだけ読めば動く。素体も焼き込む） |
+| `kabu/data/daily/` | 日次スナップショットの履歴（まとめ精算・監査用） |
+| `kabu/data/index.json` | どの日の履歴が実在するかの目録（静的配信ではディレクトリ一覧が取れないため） |
+| `kabu/data/fin/<code>.json` | 決算（TTM。週次） |
 | `scripts/kabu/` | 取得・検証・シミュレーション |
 | `.github/workflows/` | 日次・週次・検証 |
 
+## 道具
+
+```
+node scripts/build-kabu.mjs           # index.html を組み立てる（ソースを直したら必ず）
+node scripts/build-kabu.mjs --check   #   焼き直し忘れがないか見るだけ
+node scripts/build-kabu.mjs --update  #   流用元エンジンの最新コミットと sha256 を表示
+node scripts/kabu/build-universe.mjs  # JPX から銘柄マスタを更新（内国株式すべて）
+node scripts/kabu/build-universe.mjs --large-only   # 大型 99 銘柄に絞る（動作確認用）
+node scripts/kabu/fetch-prices.mjs    # 日足 → latest.json（平日 16:30 JST に Actions が回す）
+node scripts/kabu/fetch-fin.mjs       # 決算 → fin/<code>.json（週次）
+node scripts/kabu/archive.mjs         # 古い年の日次履歴を 1 ファイルに畳む（§8.7）
+node scripts/kabu/validate.mjs        # ゲームが読めない JSON をコミットさせないための検査
+node scripts/kabu/sim.mjs             # 決定論・A/B 対称・停止性・勝率曲線・分割検出
+node scripts/serve.mjs                # 手元で遊ぶための簡易サーバー
+```
+
+`--dry` を付けると書き込みません。`--limit N` で先頭 N 銘柄だけ試せます。
+
 ## データソース
 
-株価日足は stooq、決算は J-Quants（無料プラン）、業種は JPX。恒常費用ゼロ。詳細と失敗時の挙動は設計書 §2。
+株価日足・決算は Yahoo Finance、銘柄マスタ（社名・33 業種・規模区分）は JPX「東証上場銘柄一覧」。
+いずれも認証もキーも不要で、恒常費用はゼロ。設計書が前提にしていた stooq と J-Quants が
+使えなくなった経緯は §14。失敗時の挙動（1 銘柄の失敗は前回値を引き継ぎ、全体の失敗では更新しない）は §2.1。
+
+## 対戦エンジン
+
+エンジン（`CB`）は BarcodeTool 側が原本で、こちらは触りません。`vendor/BarcodeTool.commit` に
+固定したコミットから `BarcodeTool.html` を取得し、sha256 で照合してから `CB` の定義だけを抜き出して
+`index.html` に埋め込みます。更新するときは `--update` が出す commit と sha256 を手で書き換え、
+`sim.mjs` で決定論・対称性・勝率曲線が崩れていないことを確かめてから進めます。
+
+## 注意
+
+遊びのためのものです。表示している株価・決算は実データですが、**投資判断には使えません**。
+動くお金はゲーム内通貨だけで、課金も送金もありません。

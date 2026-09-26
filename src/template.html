@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>株バトル</title>
+<meta name="description" content="日本株を決算・株価・事業からキャラクターにして戦わせるゲーム。">
+<style>
+:root{
+  --bg:#1e1e2e; --bg2:#181825; --panel:#313244; --line:#45475a;
+  --fg:#cdd6f4; --dim:#9399b2; --faint:#6c7086;
+  --up:#a6e3a1; --down:#f38ba8; --accent:#89b4fa; --warn:#f9e2af;
+  --wood:#a6e3a1; --fire:#fab387; --earth:#f9e2af; --metal:#a6adc8; --water:#89dceb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:14px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  -webkit-text-size-adjust:100%}
+a{color:var(--accent)}
+button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;padding:.45em .9em;cursor:pointer}
+button:hover:not(:disabled){background:var(--line)}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--accent);color:#11111b;border-color:var(--accent);font-weight:700}
+button.sm{padding:.25em .6em;font-size:12px}
+/* 検索・絞り込みの部品。狭い画面でも横に溢れないよう min-width:0 を効かせる */
+input,select{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;padding:.35em .6em;min-width:0;max-width:100%}
+input[type="search"]{flex:1 1 150px}
+input[type="checkbox"]{width:1em;height:1em;flex:none;accent-color:var(--accent)}
+label.chk{display:inline-flex;gap:4px;align-items:center;font-size:12px;color:var(--dim);white-space:nowrap}
+h1,h2,h3{line-height:1.35;margin:0}
+table{border-collapse:collapse;width:100%}
+th,td{padding:.4em .5em;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--dim);font-weight:600;font-size:12px;cursor:pointer;position:sticky;top:0;background:var(--bg2);z-index:1}
+.wrap{max-width:1000px;margin:0 auto;padding:0 16px}
+.pad{padding-block:16px}
+
+/* ── 見出し ── */
+header{background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.hrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:10px}
+.brand{font-weight:800;letter-spacing:.06em;font-size:16px}
+.mkt{font-size:12px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.cash{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:700}
+nav{display:flex;gap:4px;overflow-x:auto;padding-bottom:8px}
+nav button{border-radius:999px;white-space:nowrap}
+nav button[aria-current="true"]{background:var(--accent);color:#11111b;border-color:var(--accent);font-weight:700}
+
+/* ── 部品 ── */
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.muted{color:var(--dim)}.faint{color:var(--faint)}
+.small{font-size:12px}
+.num{font-variant-numeric:tabular-nums}
+.up{color:var(--up)}.down{color:var(--down)}
+.tag{display:inline-block;font-size:11px;padding:.1em .55em;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel);color:var(--dim);white-space:nowrap}
+.tag.on{background:var(--warn);color:#11111b;border-color:var(--warn);font-weight:700}
+.tag.off{opacity:.6}
+.el{display:inline-grid;place-items:center;width:1.7em;height:1.7em;border-radius:6px;
+  font-weight:800;color:#11111b;font-size:12px}
+.el0{background:var(--wood)}.el1{background:var(--fire)}.el2{background:var(--earth)}
+.el3{background:var(--metal)}.el4{background:var(--water)}
+.rare{font-weight:800;letter-spacing:.04em}
+.bar{height:6px;border-radius:3px;background:var(--panel);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent)}
+/* 3 列目は「100 +6」まで折り返さない幅にする（増減が次の行に落ちると行が二重に見える） */
+.stat{display:grid;grid-template-columns:2.2em 1fr 4.6em;gap:6px;align-items:center;font-size:12px}
+.stat>span:last-child{white-space:nowrap;text-align:right}
+.hp{display:grid;grid-template-columns:1fr;gap:2px}
+.avatar{width:44px;height:44px;flex:none}
+.avatar.lg{width:72px;height:72px}
+/* 旅立ち（上場廃止）のアバターは灰色にする（設計書 §8.4） */
+.gone{filter:grayscale(1);opacity:.55}
+.empty{color:var(--faint);text-align:center;padding:2.5em 1em}
+.scroll{max-height:62vh;overflow:auto}
+dialog{background:var(--bg2);color:var(--fg);border:1px solid var(--line);border-radius:14px;
+  padding:0;max-width:640px;width:calc(100vw - 32px)}
+dialog::backdrop{background:#000a}
+.dlg-body{padding:16px;max-height:80vh;overflow:auto}
+.slot{display:flex;gap:10px;align-items:center;padding:8px;border:1px dashed var(--line);
+  border-radius:10px;min-height:62px}
+.slot.filled{border-style:solid;background:var(--panel)}
+.log{font-size:12px;line-height:1.9;max-height:44vh;overflow:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.log .hit{color:var(--fg)}.log .crit{color:var(--warn);font-weight:700}
+.log .note{color:var(--accent)}.log .ko{color:var(--down);font-weight:700}
+.log .miss{color:var(--faint)}
+.gsep{border-top:1px solid var(--line);margin:.5em 0;padding-top:.4em;color:var(--dim)}
+.pill{display:inline-flex;gap:4px;align-items:center}
+.notes{margin:8px 0;padding-left:0;list-style:none}
+.notes li{padding:.3em 0 .3em .9em;border-left:2px solid var(--accent);margin-bottom:4px;font-size:12px}
+details>summary{cursor:pointer;color:var(--dim);font-size:12px}
+@media(max-width:560px){
+  .wrap{padding:0 12px}
+  th,td{padding:.35em .3em;font-size:12px}
+  .hide-s{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="hrow">
+      <span class="brand">株バトル</span>
+      <span class="mkt" id="mkt"></span>
+      <span class="cash" id="cash"></span>
+    </div>
+    <nav id="nav"></nav>
+  </div>
+</header>
+
+<main class="wrap pad" id="main"><div class="empty">読み込み中…</div></main>
+
+<footer class="wrap pad small faint">
+  データ: 株価・決算は Yahoo Finance、銘柄マスタは JPX「東証上場銘柄一覧」。
+  対戦エンジンは <a href="https://github.com/ksaga115/BarcodeTool">BarcodeTool</a> のコードバトル（__ENGINE_COMMIT__）。
+  ビルド __BUILD_DATE__ ／ 遊びのためのもので、投資判断には使えません。
+</footer>
+
+<dialog id="dlg"><div class="dlg-body" id="dlg-body"></div></dialog>
+
+<script>
+/*__CB_ENGINE__*/
+</script>
+<script>
+/*__KABU_CORE__*/
+</script>
+<script>
+"use strict";
+(function () {
+
+// ══════════════ セーブ（端末内）══════════════
+// 設計書 §0 の柱 6: localStorage ＋ JSON 書き出し。スキーマは版番号を持ち、旧版を 1 世代残す。
+// §8.6 の約束: キーは kabu_battle_v1 のまま、フィールドは追加だけ。
+// 新しいフィールドが無い古いセーブを読んでも落ちないこと（loadStore で 1 つずつ確かめて写す）。
+var SAVE_KEY = "kabu_battle_v1";
+var INITIAL_CASH = 300000;
+
+function blankSeason(id) {
+  return {
+    id: id || "",       // "YYYY-MM"（月＝1 シーズン。設計書 §7.5）
+    days: 0, wins: 0, losses: 0, draws: 0, points: 0,
+    hits: 0, misses: 0, gain: 0, best: 0,
+    sells: 0,           // 手放した回数（塩漬けの判定）
+    hotDays: 0,         // 出来高が跳ねた銘柄を連れて戦った日数
+    divDays: 0,         // 配当利回りの高い銘柄を連れて戦った日数
+    spreadDays: 0,      // 3 属性ばらばらで戦った日数
+    focusDays: 0,       // 同属性 3 体で戦った日数
+    comebacks: 0,       // 逆境の銘柄を抱えて勝った日数
+    peakAssets: 0       // そのシーズンの総資産の最高値
+  };
+}
+
+function blankStore() {
+  return {
+    v: 1,
+    cash: INITIAL_CASH,
+    holdings: {},          // code -> {units, cost, last}  cost = 1 口あたりの取得単価／last = 最後に見た終値
+    party: ["", "", ""],   // 前衛・中衛・後衛
+    settledTo: "",         // ここまでの営業日は精算済み
+    predict: {},           // "YYYY-MM-DD" -> { code: "up"|"down"|"flat" }
+    streak: {},            // code -> 予想の連勝数
+    results: [],           // 直近の精算結果（新しい順・最大 60 件）
+    stats: { days: 0, wins: 0, losses: 0, hits: 0, misses: 0, best: 0, streak: 0 },
+    seenIntro: false,
+    // ── ここから下は後から足したフィールド。古いセーブには無い（無くても動く）──
+    delisted: [],          // 旅立ち（上場廃止で自動的に手放した記録。設計書 §8.4）
+    titles: [],            // 獲得した称号（永続。設計書 §7.5）
+    seasons: [],           // 過去シーズンの成績（軽量）
+    season: blankSeason("")// 今のシーズンの途中経過
+  };
+}
+
+var store = blankStore();
+
+function loadStore() {
+  try {
+    var raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    var j = JSON.parse(raw);
+    if (!j || j.v !== 1) return;
+    var s = blankStore();
+    s.cash = num(j.cash, INITIAL_CASH);
+    if (j.holdings && typeof j.holdings === "object") {
+      for (var c in j.holdings) {
+        var h = j.holdings[c];
+        var units = Math.max(0, num(h && h.units, 0));
+        if (units > 0) {
+          s.holdings[c] = { units: units, cost: Math.max(0, num(h.cost, 0)) };
+          if (isFinite(num(h.last, NaN))) s.holdings[c].last = num(h.last);
+        }
+      }
+    }
+    if (Array.isArray(j.party)) s.party = [0, 1, 2].map(function (i) { return typeof j.party[i] === "string" ? j.party[i] : ""; });
+    if (typeof j.settledTo === "string") s.settledTo = j.settledTo;
+    if (j.predict && typeof j.predict === "object") s.predict = j.predict;
+    if (j.streak && typeof j.streak === "object") s.streak = j.streak;
+    if (Array.isArray(j.results)) s.results = j.results.slice(0, 60);
+    if (j.stats && typeof j.stats === "object") Object.assign(s.stats, j.stats);
+    s.seenIntro = !!j.seenIntro;
+    // 追加フィールド（古いセーブには無い）
+    if (Array.isArray(j.delisted)) {
+      s.delisted = j.delisted.filter(function (d) { return d && d.code; }).slice(0, 200);
+    }
+    if (Array.isArray(j.titles)) {
+      s.titles = j.titles.filter(function (t) { return t && t.key; }).slice(0, 100);
+    }
+    if (Array.isArray(j.seasons)) s.seasons = j.seasons.filter(function (x) { return x && x.id; }).slice(-36);
+    if (j.season && typeof j.season === "object") Object.assign(s.season, j.season);
+    store = s;
+  } catch (e) { /* 壊れたセーブは無視して初期状態で始める（落とさない） */ }
+}
+
+function saveStore() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(store)); } catch (e) {}
+}
+
+// ══════════════ 小物 ══════════════
+function num(v, d) { var n = Number(v); return isFinite(n) ? n : (d === undefined ? 0 : d); }
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function yen(v) { return Math.round(num(v)).toLocaleString("ja-JP"); }
+function pct(v, digits) { var n = num(v) * 100; return (n >= 0 ? "+" : "") + n.toFixed(digits === undefined ? 2 : digits) + "%"; }
+function cls(v) { return v > 0 ? "up" : v < 0 ? "down" : ""; }
+function elClass(i) { return "el el" + i; }
+// 併合で口数が割り切れないことがあるので、端数があるときだけ小数を出す
+function units(v) {
+  var n = num(v);
+  return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(2);
+}
+
+// ══════════════ データ ══════════════
+var D = { universe: null, latest: null, moves: null, index: null, daily: {} };
+
+function loadJson(path) {
+  return fetch(path, { cache: "no-cache" }).then(function (r) {
+    if (!r.ok) throw new Error(path + " が読めません（" + r.status + "）");
+    return r.json();
+  });
+}
+
+function stockOf(code) { return (D.universe.stocks || {})[code] || null; }
+function stateOf(code, day) { return ((day || D.latest).stocks || {})[code] || null; }
+
+// 決算の内訳は「図鑑のカードを開いたときにその 1 銘柄だけ」取りに行く（設計書 §9.2）。
+// 全銘柄ぶん先読みすると数千リクエストになるので、起動時には触らない。
+// 素体（5 ステータス・レア度・特性）は latest.json に焼き込まれた値を使う（下の bakeOver）。
+var finCache = Object.create(null);     // code -> ttm または null（一度試したら覚える）
+var finPending = Object.create(null);   // 取りに行っている途中のもの（同じ銘柄を二度取りに行かない）
+function loadFin(code) {
+  if (code in finCache) return Promise.resolve(finCache[code]);
+  if (finPending[code]) return finPending[code];
+  finPending[code] = loadJson("kabu/data/fin/" + code + ".json").then(function (j) {
+    return (j && j.ttm) ? j.ttm : null;
+  }).catch(function () { return null; }).then(function (ttm) {
+    finCache[code] = ttm; delete finPending[code];
+    return ttm;
+  });
+  return finPending[code];
+}
+
+// 時価総額の上位 10（特性 serene の判定に使う。焼き込みが無いときの予備経路でだけ効く）
+var top10 = Object.create(null);
+function computeTop10() {
+  var rows = Object.keys(D.latest.stocks || {}).map(function (c) {
+    return { c: c, m: num(D.latest.stocks[c].mcap) };
+  }).sort(function (a, b) { return b.m - a.m; }).slice(0, 10);
+  top10 = Object.create(null);
+  rows.forEach(function (r) { top10[r.c] = true; });
+}
+
+/**
+ * latest.json に焼き込まれた素体を個体に載せる。
+ * データ層が stats / hp / hpAdd / rare / rareRank / traitKeys / provisional を焼き込む前提だが、
+ * まだ焼き込まれていない latest.json でも動くよう、無ければ組み立てた値のままにする。
+ */
+function bakeOver(b, st) {
+  if (!b || !st || !st.stats) return b;
+  var stats = {}, ok = true;
+  CB.STAT_KEYS.forEach(function (k) {
+    var v = Number(st.stats[k]);
+    if (!isFinite(v)) ok = false; else stats[k] = Math.round(v);
+  });
+  if (!ok) return b;
+  var sum = 0;
+  CB.STAT_KEYS.forEach(function (k) { sum += stats[k]; });
+  b.stats = stats; b.sum = sum; b.total = Math.round(sum / 5); b.rank = CB.rankOf(b.total);
+  if (isFinite(num(st.hpAdd, NaN))) b.hpAdd = Math.round(num(st.hpAdd));
+  if (isFinite(num(st.hp, NaN))) b.kabu.hp = Math.round(num(st.hp));
+  if (st.rare != null) b.kabu.rare = num(st.rare);
+  if (st.rareRank) b.kabu.rareRank = String(st.rareRank);
+  if (Array.isArray(st.traitKeys) && st.traitKeys.length) {
+    b.kabu.traitKeys = st.traitKeys.slice(0, 2);
+    b.kabu.traitNotes = b.kabu.traitKeys.map(function (k) { return { key: k, why: "" }; });
+    var t = null;
+    CB.TRAITS.forEach(function (x) { if (x.key === b.kabu.traitKeys[0]) t = x; });
+    if (t) b.trait = t;
+  }
+  // 焼き込みがある日は provisional もデータ層の言うとおりにする（真のときだけ立っている）
+  b.kabu.provisional = !!st.provisional;
+  b.kabu.baked = true;
+  return b;
+}
+
+/** 素体（その日の決算・株価から。状態係数は乗せない） */
+function baseOf(code, day) {
+  var d = day || D.latest;
+  var u = stockOf(code), st = stateOf(code, d);
+  if (!u || !st) return null;
+  // fin は渡さない。決算からの計算はデータ層（latest.json への焼き込み）が持つ。
+  // 焼き込みが無ければ「株価と出来高だけの暫定素体」になる（設計書 §12 の最終行）。
+  var b = KB.buildFromStock({
+    code: code, u: u, fin: null, state: st, moves: D.moves,
+    date: d.date, mcapTop10: !!top10[code]
+  });
+  return bakeOver(b, st);
+}
+
+/** 今日のその銘柄（素体 × 状態係数）。予想の当たり外れも効かせる */
+function todayOf(code, day, extra) {
+  var d = day || D.latest;
+  var base = baseOf(code, d);
+  if (!base) return null;
+  var ex = extra || {};
+  var st = stateOf(code, d);
+  ex.streak = num(store.streak[code]);
+  // 決算発表日（データ層が焼き込む）。必殺技の解放条件 earnings（設計書 §6.4）につながります
+  if (st && st.earnings) ex.earnings = true;
+  var mods = KB.stateMods(st, d.market, ex);
+  var b = KB.applyMods(base, mods);
+  // 必殺技は解放された日だけ技に入る（技だけ組み直す）
+  if (mods.unlocked && Object.keys(mods.unlocked).length) {
+    var withUlt = KB.buildFromStock({
+      code: code, u: stockOf(code), fin: null, state: stateOf(code, d),
+      moves: D.moves, date: d.date, unlocked: mods.unlocked, mcapTop10: !!top10[code]
+    });
+    b.moves = withUlt.moves;
+  }
+  return b;
+}
+
+/**
+ * 一覧・図鑑の 1 行ぶんの軽い情報。3,500 銘柄を並べるので、
+ * 表と札の描画では個体（技まで組む）を作らない。
+ */
+function lightOf(code, day) {
+  var d = day || D.latest;
+  var u = stockOf(code), st = stateOf(code, d);
+  if (!u) return null;
+  var elem = elemOfCode(code);
+  return {
+    code: code, u: u, st: st, elem: elem, element: CB.ELEMENTS[elem],
+    hash: KB.dayHash(code, d.date),
+    rare: st && st.rare != null ? num(st.rare) : 0.35,
+    rareRank: st && st.rareRank ? String(st.rareRank) : "C"
+  };
+}
+
+// ══════════════ 手続き生成のアバター（設計書 §10）══════════════
+// 画像は用意していないので、属性色とコードのハッシュだけで顔を描く。外部素材ゼロ・決定論。
+var EL_COLOR = ["#a6e3a1", "#fab387", "#f9e2af", "#a6adc8", "#89dceb"];
+function avatarSvg(beast, size, gone) {
+  var h = beast.hash >>> 0, e = beast.elem, col = EL_COLOR[e], s = size || 44;
+  var eyes = 1 + (h & 1) + ((h >> 7) & 1);           // 1〜3 個
+  var mouth = (h >> 3) % 3;
+  var tilt = ((h >> 11) % 21) - 10;
+  var g = "";
+  // 属性ごとの飾り（木=若葉 / 火=炎 / 土=岩 / 金=刃 / 水=しずく）
+  if (e === 0) g = '<path d="M32 9 Q38 2 44 8 Q38 14 32 9Z" fill="' + col + '"/>';
+  else if (e === 1) g = '<path d="M32 4 L38 14 L26 14Z" fill="' + col + '"/>';
+  else if (e === 2) g = '<rect x="24" y="6" width="16" height="8" rx="2" fill="' + col + '"/>';
+  else if (e === 3) g = '<path d="M32 3 L36 15 L28 15Z" fill="' + col + '"/>';
+  else g = '<path d="M32 4 Q38 12 32 16 Q26 12 32 4Z" fill="' + col + '"/>';
+  var ex = [];
+  for (var i = 0; i < eyes; i++) {
+    var x = 32 + (i - (eyes - 1) / 2) * 11;
+    ex.push('<circle cx="' + x + '" cy="34" r="4" fill="#11111b"/>' +
+            '<circle cx="' + (x + ((h >> (i + 2)) & 1 ? 1.3 : -1.3)) + '" cy="33" r="1.5" fill="#fff"/>');
+  }
+  var mo = mouth === 0 ? '<path d="M26 46 Q32 51 38 46" stroke="#11111b" stroke-width="2.4" fill="none" stroke-linecap="round"/>'
+    : mouth === 1 ? '<rect x="27" y="45" width="10" height="3" rx="1.5" fill="#11111b"/>'
+      : '<path d="M26 48 Q32 43 38 48" stroke="#11111b" stroke-width="2.4" fill="none" stroke-linecap="round"/>';
+  return '<svg class="avatar' + (s > 50 ? " lg" : "") + (gone ? " gone" : "") +
+    '" viewBox="0 0 64 64" width="' + s + '" height="' + s + '" aria-hidden="true">' +
+    '<g transform="rotate(' + tilt + ' 32 36)">' + g +
+    '<circle cx="32" cy="38" r="21" fill="' + col + '" opacity=".9"/>' +
+    ex.join("") + mo + '</g></svg>';
+}
+
+// ══════════════ 画面の骨組み ══════════════
+var TABS = [
+  { id: "home", label: "トップ" },
+  { id: "market", label: "市場" },
+  { id: "party", label: "編成" },
+  { id: "predict", label: "予想" },
+  { id: "book", label: "図鑑" }
+];
+var tab = "home";
+
+function renderHeader() {
+  var L = D.latest, m = L.market || {};
+  var bits = [];
+  bits.push('<span>最終更新 ' + esc(L.date) + '</span>');
+  bits.push('<span>日経 <b class="num ' + cls(m.nk225Chg) + '">' + yen(m.nk225) + '</b> <span class="' + cls(m.nk225Chg) + '">' + pct(m.nk225Chg) + '</span></span>');
+  if (m.crash) bits.push('<span class="tag on">暴落の日</span>');
+  if (m.festival) bits.push('<span class="tag on">祭りの日</span>');
+  if (!L.marketOpen) bits.push('<span class="tag">休場</span>');
+  var behind = daysBehind();
+  if (behind >= 3) bits.push('<span class="tag on">データ更新が ' + behind + ' 日止まっています</span>');
+  $("mkt").innerHTML = bits.join("");
+  $("cash").innerHTML = '資金 <span class="num">' + yen(store.cash) + '</span> 円';
+
+  $("nav").innerHTML = TABS.map(function (t) {
+    var badge = t.id === "home" && pendingDays().length ? " ●" : "";
+    return '<button data-tab="' + t.id + '" aria-current="' + (tab === t.id) + '">' + esc(t.label) + badge + '</button>';
+  }).join("");
+}
+
+function daysBehind() {
+  // latest.json の日付から今日までの営業日っぽい日数（土日だけ除く粗い数え方）
+  var d = new Date(D.latest.date + "T15:00:00+09:00"), now = new Date(), n = 0;
+  while (d < now) {
+    d = new Date(d.getTime() + 86400000);
+    var w = d.getUTCDay();
+    if (w !== 0 && w !== 6) n++;
+  }
+  return Math.max(0, n - 1);
+}
+
+function render() {
+  renderHeader();
+  var el = $("main");
+  if (tab === "home") el.innerHTML = viewHome();
+  else if (tab === "market") el.innerHTML = viewMarket();
+  else if (tab === "party") el.innerHTML = viewParty();
+  else if (tab === "predict") el.innerHTML = viewPredict();
+  else el.innerHTML = viewBook();
+  el.scrollTop = 0;
+}
+
+// 検索欄に字を打つたび描き直すので、描き直したあとに入力欄へ戻す（打っている途中で外れないように）
+function renderKeepFocus(el) {
+  var id = el.id, pos = el.selectionStart;
+  render();
+  var n = $(id);
+  if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
+}
+
+// ══════════════ 営業日の並び（index.json）══════════════
+// 別のワークフローが kabu/data/index.json を書く:
+//   { schemaVersion, updatedAt, latest, days:[...], archived:[...] }
+// days は daily/<date>.json が実在する日付の昇順。無くても動く（latest.json の 1 日だけになる）。
+function tradingDays() {
+  var days = [];
+  if (D.index && Array.isArray(D.index.days)) {
+    days = D.index.days.filter(function (d) { return typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d); });
+  }
+  if (days.indexOf(D.latest.date) < 0) days.push(D.latest.date);
+  days.sort();
+  // latest より先の日付は精算しない（その日の状態がまだ無い）
+  return days.filter(function (d) { return d <= D.latest.date; });
+}
+
+function pendingDays() {
+  return tradingDays().filter(function (d) { return !store.settledTo || d > store.settledTo; });
+}
+
+/**
+ * 日次スナップショットを 1 日ぶん読む。
+ * index.json の dailyExt が ".json.gz" なら中身は gzip なので、その場で展開する
+ * （配信元が先に展開して返してくる場合もあるので、gzip の目印を見てから決めます）。
+ */
+function loadDaily(date) {
+  var ext = (D.index && typeof D.index.dailyExt === "string" && D.index.dailyExt) ? D.index.dailyExt : ".json";
+  var url = "kabu/data/daily/" + date + ext;
+  return fetch(url, { cache: "no-cache" }).then(function (r) {
+    if (!r.ok) throw new Error(url + " が読めません（" + r.status + "）");
+    return r.arrayBuffer();
+  }).then(function (buf) {
+    var u8 = new Uint8Array(buf);
+    if (u8.length > 2 && u8[0] === 0x1f && u8[1] === 0x8b) {          // gzip の目印
+      if (typeof DecompressionStream === "undefined") throw new Error("この端末では gzip を展開できません");
+      return new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).text()
+        .then(function (t) { return JSON.parse(t); });
+    }
+    return JSON.parse(new TextDecoder("utf-8").decode(u8));
+  });
+}
+
+/** 精算に必要な日をまとめて読む。読めない日は入れない（飛ばす） */
+function loadDays(days) {
+  return Promise.all(days.map(function (date) {
+    if (date === D.latest.date) { D.daily[date] = D.latest; return null; }
+    if (D.daily[date]) return null;
+    return loadDaily(date).then(function (j) {
+      if (j && j.stocks && j.date) D.daily[date] = j;
+    }).catch(function () { /* 読めない日は飛ばす */ });
+  }));
+}
+
+// ══════════════ 称号とシーズン（設計書 §7.5）══════════════
+// 月＝1 シーズン。勝ち点（勝 3・引 1）と予想的中数で順位帯を決める。
+// いまの対戦は 2 本先取で必ずどちらかが勝つので、引き分けは出ません（勝ち点 1 は将来のため）。
+var TITLES = [
+  { key: "okuri", name: "億り人", aspect: "資産",
+    why: "資金と評価額の合計が 100 万円を超えた",
+    test: function (se, ctx) { return ctx.assets >= 1000000; } },
+  { key: "shiozuke", name: "塩漬け仙人", aspect: "持ち続ける",
+    why: "ひと月のあいだ一度も手放さず、含み損を抱えたまま 10 日戦った",
+    test: function (se, ctx) { return se.sells === 0 && se.days >= 10 && ctx.hasLoss; } },
+  { key: "zairyo", name: "材料株ハンター", aspect: "出来高",
+    why: "出来高が普段の 2 倍以上に跳ねた銘柄を連れて 5 日戦った",
+    test: function (se) { return se.hotDays >= 5; } },
+  { key: "haito", name: "配当長者", aspect: "配当",
+    why: "配当利回りの高い銘柄（特性「回復」）を連れて 10 日戦った",
+    test: function (se) { return se.divDays >= 10; } },
+  { key: "senri", name: "千里眼", aspect: "予想",
+    why: "ひと月で予想を 10 回以上当て、的中率が 6 割を超えた",
+    test: function (se) { return se.hits >= 10 && se.hits / Math.max(1, se.hits + se.misses) >= 0.6; } },
+  { key: "renshou", name: "常勝将軍", aspect: "連勝",
+    why: "5 連勝した",
+    test: function (se) { return se.best >= 5; } },
+  { key: "gyakkyo", name: "逆境の梟", aspect: "逆境",
+    why: "年初来の安値圏にいる銘柄を抱えたまま 3 日勝った",
+    test: function (se) { return se.comebacks >= 3; } },
+  { key: "gogyo", name: "五行の調停者", aspect: "編成（分散）",
+    why: "3 属性ばらばらの編成で 10 日戦った",
+    test: function (se) { return se.spreadDays >= 10; } },
+  { key: "ittenbari", name: "一点張りの博徒", aspect: "編成（集中）",
+    why: "同じ属性 3 体の編成で 5 日戦った",
+    test: function (se) { return se.focusDays >= 5; } },
+  { key: "muhai", name: "無敗の月", aspect: "戦績",
+    why: "ひと月を 5 日以上、一度も負けずに戦った",
+    test: function (se) { return se.days >= 5 && se.losses === 0; } }
+];
+
+function seasonIdOf(date) { return String(date || "").slice(0, 7); }
+
+/** 勝ち点＋予想的中で順位帯（設計書 §7.5）。帯は月内の積み上げで上がっていきます */
+function seasonBand(se) {
+  var p = num(se.points) + num(se.hits);
+  if (p >= 60) return { rank: "S", name: "S 帯（相場の主）" };
+  if (p >= 40) return { rank: "A", name: "A 帯（一軍）" };
+  if (p >= 24) return { rank: "B", name: "B 帯（中堅）" };
+  if (p >= 12) return { rank: "C", name: "C 帯（見習い）" };
+  return { rank: "D", name: "D 帯（新入り）" };
+}
+
+function heldValue() {
+  var v = 0;
+  Object.keys(store.holdings).forEach(function (c) {
+    var st = stateOf(c), hd = store.holdings[c];
+    var price = st ? num(st.close) : num(hd.last, hd.cost);
+    v += price * num(hd.units);
+  });
+  return v;
+}
+
+function hasTitle(key) {
+  return store.titles.some(function (t) { return t.key === key; });
+}
+
+/** 条件を満たした称号をその場で与える（永続）。何を得たかは精算の結果に出します */
+function awardTitles(date, notes) {
+  var ctx = {
+    assets: store.cash + heldValue(),
+    hasLoss: Object.keys(store.holdings).some(function (c) {
+      var st = stateOf(c);
+      return st && num(st.close) < num(store.holdings[c].cost);
+    })
+  };
+  TITLES.forEach(function (t) {
+    if (hasTitle(t.key)) return;
+    var ok = false;
+    try { ok = !!t.test(store.season, ctx); } catch (e) { ok = false; }
+    if (!ok) return;
+    store.titles.push({ key: t.key, name: t.name, aspect: t.aspect, why: t.why, season: store.season.id, date: date });
+    notes.push({ kind: "title", text: "称号「" + t.name + "」を獲得しました（" + t.why + "）。" });
+  });
+}
+
+/** シーズンが変わったので、いまの成績を過去ぶんとして残す（軽量） */
+function closeSeason(notes) {
+  var se = store.season;
+  if (!se.id || !se.days) return;
+  var band = seasonBand(se);
+  store.seasons.push({
+    id: se.id, days: se.days, wins: se.wins, losses: se.losses, draws: se.draws,
+    points: se.points, hits: se.hits, misses: se.misses, gain: Math.round(se.gain),
+    band: band.rank,
+    titles: store.titles.filter(function (t) { return t.season === se.id; }).map(function (t) { return t.name; })
+  });
+  store.seasons = store.seasons.slice(-36);
+  notes.push({
+    kind: "season",
+    text: se.id + " のシーズンが終わりました。" + band.name + "（勝ち点 " + se.points +
+      "・予想的中 " + se.hits + "・" + se.days + " 日）。"
+  });
+}
+
+// ══════════════ トップ ══════════════
+function viewHome() {
+  var h = [];
+  var pend = pendingDays();
+
+  h.push('<div class="card"><div class="spread">');
+  h.push('<div><h2>今日の相場</h2><div class="muted small">' + esc(D.latest.date) +
+    (D.latest.marketOpen ? "" : " ／ 休場。前営業日の主役がそのまま出ます") + '</div></div>');
+  if (pend.length) h.push('<button class="primary" id="btn-settle">' + pend.length + ' 日ぶんを精算して対戦</button>');
+  else h.push('<span class="tag">精算済み</span>');
+  h.push('</div>');
+  if (pend.length > 1) {
+    h.push('<div class="muted small" style="margin-top:6px">開かなかった日も順に精算します（' +
+      esc(pend[0]) + ' 〜 ' + esc(pend[pend.length - 1]) + '）。結果は最後の日の対戦をお見せします。</div>');
+  }
+
+  var p = KB.protagonists(D.latest);
+  h.push('<div class="grid" style="margin-top:12px">');
+  [["値上がり率 1 位", p.up], ["値下がり率 1 位", p.down], ["出来高比 1 位", p.hot]].forEach(function (x) {
+    if (!x[1]) return;
+    var g = lightOf(x[1]);
+    if (!g || !g.st) return;
+    h.push('<div class="slot filled" data-code="' + x[1] + '">' + avatarSvg(g) +
+      '<div style="min-width:0"><div class="small muted">' + esc(x[0]) + '</div>' +
+      '<div><b>' + esc(g.u.short) + '</b> <span class="' + elClass(g.elem) + '">' + g.element.name + '</span></div>' +
+      '<div class="small num ' + cls(g.st.chg1) + '">' + yen(g.st.close) + '円 ' + pct(g.st.chg1) + '</div></div></div>');
+  });
+  h.push('</div></div>');
+
+  // パーティ
+  h.push('<div class="card"><div class="spread"><h2>パーティ</h2><button class="sm" data-tab="party">編成する</button></div>');
+  h.push('<div class="grid" style="margin-top:10px">');
+  ["前衛", "中衛", "後衛"].forEach(function (pos, i) {
+    var code = store.party[i];
+    if (!code || !stockOf(code) || !stateOf(code)) { h.push('<div class="slot"><span class="faint">' + pos + '（空き）</span></div>'); return; }
+    var b = todayOf(code);
+    h.push('<div class="slot filled" data-code="' + code + '">' + avatarSvg(b) +
+      '<div style="min-width:0"><div class="small muted">' + pos + '</div>' +
+      '<div><b>' + esc(stockOf(code).short) + '</b> <span class="' + elClass(b.elem) + '">' + b.element.name + '</span></div>' +
+      '<div class="small">' + (b.kabu.tags.length ? b.kabu.tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join(" ") : '<span class="faint">平常</span>') + '</div>' +
+      '</div></div>');
+  });
+  h.push('</div></div>');
+
+  // これまで（通算・今のシーズン・称号）
+  h.push('<div class="card"><h2>これまで</h2>');
+  var s = store.stats;
+  h.push('<div class="row small muted" style="margin:6px 0 10px">' +
+    '<span>' + s.days + ' 日</span><span>勝 <b class="up">' + s.wins + '</b> 敗 <b class="down">' + s.losses + '</b></span>' +
+    '<span>予想 的中 ' + s.hits + ' / 外れ ' + s.misses + '</span>' +
+    '<span>最高連勝 ' + s.best + '</span></div>');
+
+  h.push(homeSeason());
+
+  if (!store.results.length) h.push('<div class="empty">まだ対戦していません。パーティを組んで精算してください。</div>');
+  else {
+    h.push('<h3 style="margin-top:14px">直近の対戦</h3>');
+    h.push('<div class="scroll"><table><thead><tr><th>日付</th><th>相手</th><th>結果</th><th class="hide-s">獲得</th></tr></thead><tbody>');
+    store.results.slice(0, 30).forEach(function (r) {
+      h.push('<tr data-result="' + esc(r.date) + '"><td>' + esc(r.date) + '</td>' +
+        '<td class="small">' + esc(r.foe) + '</td>' +
+        '<td class="' + (r.win ? "up" : "down") + '">' + (r.win ? "勝ち" : "負け") + ' ' + r.scoreA + '-' + r.scoreB + '</td>' +
+        '<td class="num hide-s">' + yen(r.gain) + '</td></tr>');
+    });
+    h.push('</tbody></table></div>');
+  }
+  h.push('</div>');
+
+  h.push('<div class="card"><div class="row"><button class="sm" id="btn-export">セーブを書き出す</button>' +
+    '<button class="sm" id="btn-import">セーブを読み込む</button>' +
+    '<button class="sm" id="btn-reset">最初からやり直す</button>' +
+    '<span class="faint small">セーブはこの端末の中だけにあります</span></div></div>');
+  return h.join("");
+}
+
+/** 「これまで」の中のシーズンと称号（設計書 §7.5） */
+function homeSeason() {
+  var h = [];
+  var se = store.season;
+  h.push('<h3>いまのシーズン</h3>');
+  if (!se.id || !se.days) {
+    h.push('<div class="muted small">まだこの月の精算をしていません。月ごとに勝ち点（勝ち 3 点）と予想的中を積み上げて、順位帯と称号が決まります。</div>');
+  } else {
+    var band = seasonBand(se);
+    h.push('<div class="row small" style="margin-top:4px">' +
+      '<span class="tag on">' + esc(se.id) + ' ／ ' + esc(band.name) + '</span>' +
+      '<span>勝ち点 <b class="num">' + se.points + '</b></span>' +
+      '<span>勝 <b class="up">' + se.wins + '</b> 敗 <b class="down">' + se.losses + '</b></span>' +
+      '<span>予想的中 <b class="num">' + se.hits + '</b></span>' +
+      '<span class="muted">' + se.days + ' 日</span>' +
+      '<span class="muted">獲得 ' + yen(se.gain) + ' 円</span></div>');
+  }
+
+  h.push('<h3 style="margin-top:12px">称号</h3>');
+  if (!store.titles.length) h.push('<div class="muted small">まだ称号はありません。下の一覧が狙いどころです。</div>');
+  else {
+    h.push('<div class="row" style="margin-top:4px">' + store.titles.map(function (t) {
+      return '<span class="tag on" title="' + esc(t.why) + '">' + esc(t.name) + '</span>';
+    }).join("") + '</div>');
+  }
+  h.push('<details style="margin-top:8px"><summary>称号の一覧（' + store.titles.length + ' / ' + TITLES.length + ' 獲得）</summary>');
+  h.push('<div class="small" style="margin-top:6px">');
+  TITLES.forEach(function (t) {
+    var got = hasTitle(t.key);
+    h.push('<div style="margin:3px 0"><span class="tag' + (got ? " on" : " off") + '">' + esc(t.name) + '</span> ' +
+      '<span class="' + (got ? "muted" : "faint") + '">' + esc(t.aspect) + '：' + esc(t.why) + '</span></div>');
+  });
+  h.push('</div></details>');
+
+  if (store.seasons.length) {
+    h.push('<details style="margin-top:8px"><summary>過去のシーズン（' + store.seasons.length + '）</summary>' +
+      '<table style="margin-top:6px"><thead><tr><th>月</th><th>帯</th><th>勝ち点</th><th>勝敗</th><th class="hide-s">的中</th></tr></thead><tbody>');
+    store.seasons.slice().reverse().forEach(function (x) {
+      h.push('<tr><td>' + esc(x.id) + '</td><td>' + esc(x.band || "") + '</td><td class="num">' + num(x.points) + '</td>' +
+        '<td class="num">' + num(x.wins) + '-' + num(x.losses) + '</td>' +
+        '<td class="num hide-s">' + num(x.hits) + '</td></tr>');
+    });
+    h.push('</tbody></table></details>');
+  }
+  return h.join("");
+}
+
+// ══════════════ 市場（契約）══════════════
+// 銘柄が数千になるので、検索・絞り込みで細めてから 100 件ずつ出す（全件を一度に描かない）。
+var marketSort = { key: "mcap", desc: true };
+var marketQ = { q: "", elem: "", rare: "", idx: "", fin: "", held: false, limit: 100 };
+var RARE_ORDER = ["SS", "S", "A", "B", "C", "D"];
+var INDEX_LABEL = { core30: "TOPIX Core30", large70: "TOPIX Large70", mid400: "TOPIX Mid400", nk225: "日経 225" };
+var idxOptions = [];
+
+var elemCache = Object.create(null);
+
+function computeIdxOptions() {
+  var seen = Object.create(null);
+  var stocks = D.universe.stocks || {};
+  for (var c in stocks) {
+    var u = stocks[c];
+    if (Array.isArray(u.indices)) u.indices.forEach(function (k) { seen[k] = true; });
+    // 属性は銘柄ごとに一度だけ決める（数千件の一覧を並べ替えるたびに計算しない）
+    elemCache[c] = typeof u.elem === "number" ? ((u.elem % 5) + 5) % 5 : KB.sectorElem(u.sector33);
+  }
+  idxOptions = Object.keys(seen).sort();
+}
+
+/** 検索と絞り込みを通した銘柄コード（並べ替え前） */
+function filteredCodes(q) {
+  var stocks = D.universe.stocks || {};
+  var needle = String(q.q || "").trim().toLowerCase();
+  var out = [];
+  for (var c in stocks) {
+    var u = stocks[c];
+    if (!u.listed) continue;               // 上場廃止は一覧に出さない（図鑑の「旅立ち」で見られます）
+    var st = stateOf(c);
+    if (!st) continue;
+    if (q.held && !store.holdings[c]) continue;
+    if (needle) {
+      var hay = (c + " " + (u.name || "") + " " + (u.short || "")).toLowerCase();
+      if (hay.indexOf(needle) < 0) continue;
+    }
+    if (q.elem !== "" && String(elemOfCode(c)) !== String(q.elem)) continue;
+    if (q.idx && !(Array.isArray(u.indices) && u.indices.indexOf(q.idx) >= 0)) continue;
+    if (q.rare && (st.rareRank ? String(st.rareRank) : "C") !== q.rare) continue;
+    // 決算がまだ取れていない銘柄は暫定素体（レア度 C）で、見た目がそろってしまうので分けられるようにする
+    if (q.fin === "yes" && st.provisional) continue;
+    if (q.fin === "no" && !st.provisional) continue;
+    out.push(c);
+  }
+  return out;
+}
+
+function elemOfCode(code) {
+  if (elemCache[code] != null) return elemCache[code];
+  var u = stockOf(code);
+  if (!u) return 4;
+  elemCache[code] = typeof u.elem === "number" ? ((u.elem % 5) + 5) % 5 : KB.sectorElem(u.sector33);
+  return elemCache[code];
+}
+
+function filterBar(prefix, q, withRare) {
+  var h = [];
+  h.push('<div class="row small" style="margin-top:8px">');
+  h.push('<input type="search" id="' + prefix + '-q" placeholder="社名か証券コードで探す" value="' + esc(q.q) + '">');
+  h.push('<select id="' + prefix + '-elem"><option value="">属性すべて</option>' +
+    CB.ELEMENTS.map(function (e, i) {
+      return '<option value="' + i + '"' + (String(q.elem) === String(i) ? " selected" : "") + '>' + esc(e.name) + '</option>';
+    }).join("") + '</select>');
+  if (withRare) {
+    h.push('<select id="' + prefix + '-rare"><option value="">レアすべて</option>' +
+      RARE_ORDER.map(function (r) {
+        return '<option value="' + r + '"' + (q.rare === r ? " selected" : "") + '>' + r + '</option>';
+      }).join("") + '</select>');
+    if (idxOptions.length) {
+      h.push('<select id="' + prefix + '-idx"><option value="">規模すべて</option>' +
+        idxOptions.map(function (k) {
+          return '<option value="' + esc(k) + '"' + (q.idx === k ? " selected" : "") + '>' + esc(INDEX_LABEL[k] || k) + '</option>';
+        }).join("") + '</select>');
+    }
+    h.push('<select id="' + prefix + '-fin"><option value="">決算の有無を問わない</option>' +
+      '<option value="yes"' + (q.fin === "yes" ? " selected" : "") + '>決算あり</option>' +
+      '<option value="no"' + (q.fin === "no" ? " selected" : "") + '>決算まち（暫定素体）</option></select>');
+  }
+  h.push('<label class="chk"><input type="checkbox" id="' + prefix + '-held"' + (q.held ? " checked" : "") + '>契約中のみ</label>');
+  h.push('</div>');
+  return h.join("");
+}
+
+function viewMarket() {
+  var codes = filteredCodes(marketQ);
+  // 表には顔を出さないので、個体（技まで組む）は作らない。必要な数字だけ集める。
+  var rows = codes.map(function (c) {
+    var u = stockOf(c), st = stateOf(c), hold = store.holdings[c];
+    return {
+      code: c, name: u.short || u.name, elem: elemOfCode(c),
+      rareRank: st.rareRank ? String(st.rareRank) : "C", rare: num(st.rare, 0.35),
+      close: num(st.close), chg1: num(st.chg1), chgYtd: num(st.chgYtd), mcap: num(st.mcap),
+      units: hold ? hold.units : 0
+    };
+  });
+  rows.sort(function (a, b) {
+    var k = marketSort.key, d = marketSort.desc ? -1 : 1;
+    if (k === "name") return (a.name < b.name ? -1 : 1) * d * -1;
+    if (k === "rare") return (a.rare - b.rare) * d || (a.code < b.code ? -1 : 1);
+    return (num(a[k]) - num(b[k])) * d || (a.code < b.code ? -1 : 1);
+  });
+  var shown = rows.slice(0, marketQ.limit);
+
+  var h = [];
+  h.push('<div class="card"><div class="spread"><h2>市場</h2>' +
+    '<span class="muted small">契約金 = その日の終値。手放すと当日終値で戻ります（手数料なし）</span></div>');
+  h.push(filterBar("mkt", marketQ, true));
+  h.push('<div class="muted small" style="margin-top:6px">' + rows.length + ' 銘柄のうち ' + shown.length + ' 件を表示しています。</div>');
+  h.push('<div class="scroll" style="margin-top:8px"><table><thead><tr>' +
+    th("name", "銘柄") + '<th>属性</th>' + th("rare", "レア") + th("close", "株価") +
+    th("chg1", "前日比") + th("chgYtd", "年初来", true) + th("mcap", "時価総額", true) +
+    '<th>口数</th><th></th></tr></thead><tbody>');
+  shown.forEach(function (r) {
+    h.push('<tr><td><a href="#" data-code="' + r.code + '">' + esc(r.name) + '</a> <span class="faint small">' + esc(r.code) + '</span></td>' +
+      '<td><span class="' + elClass(r.elem) + '">' + CB.ELEMENTS[r.elem].name + '</span></td>' +
+      '<td class="rare">' + esc(r.rareRank) + '</td>' +
+      '<td class="num">' + yen(r.close) + '</td>' +
+      '<td class="num ' + cls(r.chg1) + '">' + pct(r.chg1) + '</td>' +
+      '<td class="num hide-s ' + cls(r.chgYtd) + '">' + pct(r.chgYtd, 1) + '</td>' +
+      '<td class="num hide-s">' + (r.mcap ? (r.mcap / 1e12).toFixed(2) + '兆' : '—') + '</td>' +
+      '<td class="num">' + (r.units ? units(r.units) : "") + '</td>' +
+      '<td><button class="sm" data-buy="' + r.code + '" ' + (store.cash < r.close ? "disabled" : "") + '>契約</button>' +
+      (r.units ? ' <button class="sm" data-sell="' + r.code + '">手放す</button>' : '') + '</td></tr>');
+  });
+  if (!shown.length) h.push('<tr><td colspan="9" class="faint">見つかりませんでした。条件をゆるめてください。</td></tr>');
+  h.push('</tbody></table></div>');
+  if (rows.length > shown.length) {
+    h.push('<div class="row" style="margin-top:8px"><button class="sm" data-more="market">もっと見る（残り ' +
+      (rows.length - shown.length) + ' 件）</button></div>');
+  }
+  h.push('</div>');
+
+  // 保有
+  var held = Object.keys(store.holdings);
+  h.push('<div class="card"><h2>契約中</h2>');
+  if (!held.length) h.push('<div class="empty">まだ誰とも契約していません。</div>');
+  else {
+    var sum = 0, cost = 0;
+    h.push('<div class="scroll"><table><thead><tr><th>銘柄</th><th>口数</th><th>取得</th><th>現在</th><th>損益</th></tr></thead><tbody>');
+    held.forEach(function (c) {
+      var hd = store.holdings[c], st = stateOf(c), u = stockOf(c);
+      if (!st || !u) return;
+      var now = num(st.close) * hd.units, cst = hd.cost * hd.units, pl = now - cst;
+      sum += now; cost += cst;
+      h.push('<tr><td><a href="#" data-code="' + c + '">' + esc(u.short) + '</a></td>' +
+        '<td class="num">' + units(hd.units) + '</td><td class="num">' + yen(hd.cost) + '</td>' +
+        '<td class="num">' + yen(st.close) + '</td>' +
+        '<td class="num ' + cls(pl) + '">' + (pl >= 0 ? "+" : "") + yen(pl) + '</td></tr>');
+    });
+    h.push('</tbody></table></div>');
+    h.push('<div class="row small muted" style="margin-top:8px"><span>評価額 <b class="num">' + yen(sum) + '</b> 円</span>' +
+      '<span>損益 <b class="num ' + cls(sum - cost) + '">' + (sum - cost >= 0 ? "+" : "") + yen(sum - cost) + '</b> 円</span>' +
+      '<span>資金と合わせて <b class="num">' + yen(sum + store.cash) + '</b> 円</span></div>');
+  }
+  h.push('</div>');
+  return h.join("");
+}
+
+function th(key, label, hideS) {
+  var mark = marketSort.key === key ? (marketSort.desc ? " ↓" : " ↑") : "";
+  return '<th data-sort="' + key + '" class="' + (hideS ? "hide-s" : "") + '">' + esc(label) + mark + '</th>';
+}
+
+// ══════════════ 編成 ══════════════
+function viewParty() {
+  var held = Object.keys(store.holdings);
+  var h = [];
+  h.push('<div class="card"><h2>編成</h2>' +
+    '<div class="muted small">前衛が殴られます。倒れると中衛・後衛が繰り上がります。' +
+    '属性が 3 つに散ると分散の共鳴、同じ属性 3 体だと集中投資の共鳴がつきます。</div>');
+  h.push('<div class="grid" style="margin-top:12px">');
+  ["前衛", "中衛", "後衛"].forEach(function (pos, i) {
+    var code = store.party[i];
+    h.push('<div><div class="small muted">' + pos + '</div>');
+    if (code && stockOf(code) && stateOf(code)) {
+      var b = todayOf(code);
+      h.push('<div class="slot filled">' + avatarSvg(b) +
+        '<div style="min-width:0;flex:1"><div><b>' + esc(stockOf(code).short) + '</b> <span class="' + elClass(b.elem) + '">' + b.element.name + '</span></div>' +
+        '<div class="small muted">' + b.kabu.rareRank + ' ／ 体力' + b.kabu.hp + '</div></div>' +
+        '<button class="sm" data-unslot="' + i + '">外す</button></div>');
+    } else {
+      h.push('<div class="slot"><span class="faint">空き</span></div>');
+    }
+    h.push('</div>');
+  });
+  h.push('</div>');
+
+  if (partyReady() === 3) {
+    var sq = KB.squadOf(store.party.map(function (c) { return todayOf(c); }));
+    var aura = CB.squadAura(sq.beasts.map(function (b) { return b.trait.key; }), sq.reso);
+    var elems = sq.beasts.map(function (b) { return b.element.name; });
+    h.push('<div class="row small" style="margin-top:12px"><span class="muted">属性</span>' +
+      sq.beasts.map(function (b) { return '<span class="' + elClass(b.elem) + '">' + b.element.name + '</span>'; }).join("") +
+      (new Set(elems).size >= 3 ? '<span class="tag on">分散の共鳴</span>' : "") +
+      (new Set(elems).size === 1 ? '<span class="tag on">集中投資の共鳴</span>' : "") +
+      (aura.synergies.length ? aura.synergies.map(function (s) { return '<span class="tag on">' + esc(s) + '</span>'; }).join("") : "") +
+      '</div>');
+  } else {
+    h.push('<div class="muted small" style="margin-top:12px">3 体そろうと対戦できます。</div>');
+  }
+  h.push('</div>');
+
+  h.push('<div class="card"><h2>契約中から選ぶ</h2>');
+  if (!held.length) h.push('<div class="empty">契約している銘柄がありません。「市場」から契約してください。</div>');
+  else {
+    h.push('<div class="grid">');
+    held.forEach(function (c) {
+      if (!stateOf(c) || !stockOf(c)) return;
+      var b = todayOf(c), inParty = store.party.indexOf(c) >= 0;
+      h.push('<div class="slot filled">' + avatarSvg(b) +
+        '<div style="min-width:0;flex:1"><div><b>' + esc(stockOf(c).short) + '</b> <span class="' + elClass(b.elem) + '">' + b.element.name + '</span> <span class="rare">' + b.kabu.rareRank + '</span></div>' +
+        '<div class="small muted">' + b.trait.name + ' ／ ' + units(store.holdings[c].units) + ' 口</div></div>' +
+        (inParty ? '<span class="tag">編成中</span>' : '<button class="sm" data-slotin="' + c + '">入れる</button>') + '</div>');
+    });
+    h.push('</div>');
+  }
+  h.push('</div>');
+  return h.join("");
+}
+
+function partyReady() {
+  return store.party.filter(function (c) { return c && stockOf(c) && stateOf(c); }).length;
+}
+
+// ══════════════ 予想 ══════════════
+function viewPredict() {
+  var date = D.latest.date;
+  var mine = store.predict[date] || {};
+  var h = [];
+  h.push('<div class="card"><h2>今日の予想</h2>' +
+    '<div class="muted small">パーティの各銘柄が上がるか下がるかを選びます。的中すると会心率が上がり、' +
+    '外すと初手がもたつきます。終値の前日比 ±0.3% 以内は引き分け扱い（外れにはなりません）。' +
+    '締め切りはデータが次の営業日に進んだ時点です。</div>');
+  var party = store.party.filter(function (c) { return c && stockOf(c) && stateOf(c); });
+  if (!party.length) h.push('<div class="empty">先にパーティを組んでください。</div>');
+  else {
+    h.push('<div class="grid" style="margin-top:12px">');
+    party.forEach(function (c) {
+      var b = todayOf(c), cur = mine[c] || "";
+      h.push('<div class="slot filled">' + avatarSvg(b) +
+        '<div style="min-width:0;flex:1"><div><b>' + esc(stockOf(c).short) + '</b></div>' +
+        '<div class="small muted">連勝 ' + num(store.streak[c]) + '</div>' +
+        '<div class="row" style="gap:4px;margin-top:4px">' +
+        ['up', 'flat', 'down'].map(function (k) {
+          var label = { up: "上がる", flat: "動かない", down: "下がる" }[k];
+          return '<button class="sm' + (cur === k ? " primary" : "") + '" data-pred="' + c + '" data-val="' + k + '">' + label + '</button>';
+        }).join("") + '</div></div></div>');
+    });
+    h.push('</div>');
+  }
+  h.push('</div>');
+
+  // 機械の予想（設計書 §7.3: Claude は呼ばない。25 日線の上なら上）
+  h.push('<div class="card"><h2>機械の予想</h2>' +
+    '<div class="muted small">25 日線の上にいれば「上」、下なら「下」。それだけの単純なルールです。あなたの勝率と比べてください。</div>');
+  h.push('<div class="row small" style="margin-top:8px">');
+  party.forEach(function (c) {
+    var st = stateOf(c);
+    h.push('<span class="pill"><b>' + esc(stockOf(c).short) + '</b> <span class="' + (st.dev25 >= 0 ? "up" : "down") + '">' + (st.dev25 >= 0 ? "上" : "下") + '</span></span>');
+  });
+  h.push('</div></div>');
+  return h.join("");
+}
+
+// ══════════════ 図鑑 ══════════════
+var bookQ = { q: "", elem: "", rare: "", idx: "", fin: "", held: false, limit: 100 };
+
+function viewBook() {
+  var codes = filteredCodes(bookQ);
+  var shown = codes.slice(0, bookQ.limit);
+  var h = ['<div class="card"><h2>図鑑</h2><div class="muted small">' + codes.length +
+    ' 銘柄。銘柄名を押すと、素体・今日の状態・技の元ネタ・決算が見られます。</div>' + filterBar("book", bookQ, true) +
+    '<div class="muted small" style="margin-top:6px">' + shown.length + ' 件を表示しています。</div></div>'];
+  h.push('<div class="grid">');
+  shown.forEach(function (c) {
+    var g = lightOf(c), st = g.st;
+    h.push('<div class="card" style="margin:0;cursor:pointer" data-code="' + c + '">' +
+      '<div class="row">' + avatarSvg(g) +
+      '<div style="min-width:0;flex:1"><div><b>' + esc(g.u.short) + '</b> <span class="' + elClass(g.elem) + '">' + g.element.name + '</span> <span class="rare">' + esc(g.rareRank) + '</span></div>' +
+      '<div class="small muted">' + esc(g.u.sector33) + '</div>' +
+      '<div class="small num ' + cls(st.chg1) + '">' + yen(st.close) + '円 ' + pct(st.chg1) + '</div></div></div></div>');
+  });
+  h.push('</div>');
+  if (codes.length > shown.length) {
+    h.push('<div class="row" style="margin-bottom:12px"><button class="sm" data-more="book">もっと見る（残り ' +
+      (codes.length - shown.length) + ' 件）</button></div>');
+  }
+
+  // 旅立ち（上場廃止。設計書 §8.4）
+  h.push('<div class="card"><h2>旅立ち</h2><div class="muted small">' +
+    '上場廃止になった銘柄です。最終終値で自動的に手放し、記録だけを残しています。</div>');
+  if (!store.delisted.length) h.push('<div class="empty">まだありません。</div>');
+  else {
+    h.push('<div class="grid" style="margin-top:10px">');
+    store.delisted.forEach(function (d) {
+      var g = { hash: KB.hashStr(String(d.code)), elem: num(d.elem) % 5 };
+      h.push('<div class="slot filled">' + avatarSvg(g, 44, true) +
+        '<div style="min-width:0;flex:1"><div><b>' + esc(d.short || d.name || d.code) + '</b> <span class="tag">思い出</span></div>' +
+        '<div class="small muted">' + esc(d.date) + ' ／ ' + units(d.units) + ' 口を ' + yen(d.price) + ' 円で</div>' +
+        '<div class="small ' + cls(num(d.pl)) + '">' + (num(d.pl) >= 0 ? "+" : "") + yen(d.pl) + ' 円</div></div></div>');
+    });
+    h.push('</div>');
+  }
+  h.push('</div>');
+  return h.join("");
+}
+
+// ══════════════ 銘柄カード（詳細）══════════════
+var dlgCode = "";
+
+function showStock(code) {
+  var u = stockOf(code), st = stateOf(code), base = baseOf(code), today = todayOf(code);
+  if (!u || !st || !base) return;
+  dlgCode = code;
+  var h = [];
+  h.push('<div class="row">' + avatarSvg(base, 72) +
+    '<div style="flex:1;min-width:0"><h2>' + esc(u.name) + ' <span class="faint small">' + esc(code) + '</span></h2>' +
+    '<div class="row small"><span class="' + elClass(base.elem) + '">' + base.element.name + '</span>' +
+    '<span class="rare">レア度 ' + base.kabu.rareRank + '</span>' +
+    '<span class="muted">' + esc(u.sector33) + '</span>' +
+    (Array.isArray(u.indices) ? u.indices.map(function (i) { return '<span class="tag">' + esc(INDEX_LABEL[i] || i) + '</span>'; }).join("") : "") +
+    (u.listed === false ? '<span class="tag on">上場廃止</span>' : "") + '</div></div></div>');
+
+  // 素体と今日
+  h.push('<h3 style="margin-top:14px">素体</h3><div class="muted small">' +
+    (base.kabu.provisional ? "決算がまだ取れていないので、株価と出来高だけの暫定値です。決算が入ると置き換わります。" :
+      "決算（" + esc(st.fiscalId || "直近 4 四半期") + "）から決まります。四半期ごとに更新されます。") +
+    (st.earnings ? ' <span class="tag on">今日は決算発表日</span>' : "") + '</div>');
+  h.push('<div class="stat"><span>体力</span><div class="bar"><i style="width:' + base.kabu.hp + '%"></i></div><span class="num">' + base.kabu.hp + '</span></div>');
+  var LBL = { ATK: "攻", DEF: "守", SPD: "速", TEC: "技", LUK: "運" };
+  CB.STAT_KEYS.forEach(function (k) {
+    var v = base.stats[k], t = today.stats[k], d = t - v;
+    h.push('<div class="stat"><span>' + LBL[k] + '</span><div class="bar"><i style="width:' + v + '%"></i></div>' +
+      '<span class="num">' + v + (d ? ' <span class="' + cls(d) + '">' + (d > 0 ? "+" : "") + d + '</span>' : "") + '</span></div>');
+  });
+  h.push('<div class="row small" style="margin-top:8px"><span class="muted">特性</span>' +
+    base.kabu.traitNotes.map(function (n) {
+      var t = CB.TRAITS.filter(function (x) { return x.key === n.key; })[0];
+      return '<span class="tag on">' + esc(t ? t.name : n.key) + '</span>' + (n.why ? '<span class="faint">' + esc(n.why) + '</span>' : "");
+    }).join(" ") + '</div>');
+
+  // 今日の状態
+  h.push('<h3 style="margin-top:14px">今日の状態</h3>');
+  h.push('<div class="row small">' +
+    '<span>終値 <b class="num">' + yen(st.close) + '</b> 円</span>' +
+    '<span class="' + cls(st.chg1) + '">前日比 ' + pct(st.chg1) + '</span>' +
+    '<span>年初来 <span class="' + cls(st.chgYtd) + '">' + pct(st.chgYtd, 1) + '</span>（レンジ位置 ' + Math.round(num(st.ytdPos) * 100) + '%）</span>' +
+    '<span>出来高比 ' + num(st.volRatio).toFixed(2) + '</span>' +
+    '<span>25 日線乖離 ' + pct(st.dev25, 1) + '</span>' +
+    (st.per ? '<span>PER ' + st.per + '</span>' : "") + (st.pbr ? '<span>PBR ' + st.pbr + '</span>' : "") +
+    '</div>');
+  h.push('<div class="row small" style="margin-top:6px">' +
+    (today.kabu.tags.length ? today.kabu.tags.map(function (t) { return '<span class="tag on">' + esc(t) + '</span>'; }).join(" ")
+      : '<span class="faint">今日は特に何も起きていません（素体のまま戦います）</span>') + '</div>');
+
+  // 技
+  h.push('<h3 style="margin-top:14px">技</h3>');
+  today.moves.forEach(function (m) {
+    h.push('<div style="margin:6px 0"><span class="' + elClass(m.elem) + '">' + m.element.name + '</span> ' +
+      '<b>' + esc(m.name) + '</b>' + (m.ultimate ? ' <span class="tag on">必殺</span>' : "") +
+      '<div class="small muted">' + esc(m.text) + '</div>' +
+      (m.origin ? '<div class="small faint">— ' + esc(m.origin) + '</div>' : "") + '</div>');
+  });
+
+  // 決算の内訳は、このカードを開いたときにその 1 銘柄だけ取りに行く（取れなければ出さない）
+  h.push('<div id="fin-slot"></div>');
+
+  // 契約
+  var hd = store.holdings[code];
+  h.push('<h3 style="margin-top:14px">契約</h3>');
+  if (hd) {
+    var pl = (num(st.close) - hd.cost) * hd.units;
+    h.push('<div class="row small"><span>' + units(hd.units) + ' 口</span><span>取得単価 ' + yen(hd.cost) + ' 円</span>' +
+      '<span class="' + cls(pl) + '">評価損益 ' + (pl >= 0 ? "+" : "") + yen(pl) + ' 円</span></div>');
+  } else h.push('<div class="muted small">契約していません。</div>');
+  h.push('<div class="row" style="margin-top:8px">' +
+    (u.listed === false ? '<span class="muted small">上場廃止のため契約できません。</span>' :
+      '<button class="sm" data-buy="' + code + '" ' + (store.cash < num(st.close) ? "disabled" : "") + '>契約する（' + yen(st.close) + ' 円）</button>') +
+    (hd ? ' <button class="sm" data-sell="' + code + '">1 口手放す</button>' : "") +
+    ' <button class="sm" data-close="1">閉じる</button></div>');
+
+  openDialog(h.join(""));
+
+  loadFin(code).then(function (f) {
+    if (dlgCode !== code) return;              // 別の銘柄に移っていたら書き込まない
+    var slot = $("fin-slot");
+    if (slot) slot.innerHTML = f ? finHtml(f) : "";
+  });
+}
+
+function finHtml(f) {
+  return '<h3 style="margin-top:14px">決算（直近 4 四半期）</h3><div class="row small">' +
+    '<span>売上 ' + (num(f.sales) / 1e12).toFixed(2) + ' 兆</span>' +
+    '<span>' + (f.opIsPretax ? "経常" : "営業") + '利益 ' + (num(f.op) / 1e8).toFixed(0) + ' 億（利益率 ' +
+    (num(f.sales) > 0 ? (num(f.op) / num(f.sales) * 100).toFixed(1) : "—") + '%）</span>' +
+    '<span>自己資本比率 ' + (num(f.eqRatio) * 100).toFixed(0) + '%</span>' +
+    '<span>売上成長 ' + pct(f.salesGrowth, 1) + '</span>' +
+    '<span>配当 ' + yen(f.div) + ' 円</span>' +
+    (f.fiscalId ? '<span class="faint">' + esc(f.fiscalId) + '</span>' : "") + '</div>';
+}
+
+function openDialog(html) {
+  $("dlg-body").innerHTML = html;
+  var d = $("dlg");
+  if (!d.open) d.showModal();
+}
+
+// ══════════════ 上場廃止（設計書 §8.4）══════════════
+// listed:false になった銘柄は、契約中なら最終終値で自動的に手放して資金に戻し、
+// 図鑑の「旅立ち」に記録を残す。黙って消さないよう、起こったことは必ず画面に出す。
+function processDelistings() {
+  var notes = [];
+  Object.keys(store.holdings).forEach(function (code) {
+    var u = stockOf(code);
+    if (!u || u.listed !== false) return;
+    var hd = store.holdings[code], st = stateOf(code);
+    var price = st ? num(st.close) : num(hd.last, hd.cost);
+    var proceeds = Math.round(price * num(hd.units));
+    store.cash += proceeds;
+    store.delisted.unshift({
+      code: code, name: String(u.name || code), short: String(u.short || u.name || code),
+      elem: elemOfCode(code), date: String(u.delistedAt || D.latest.date),
+      units: num(hd.units), price: price, proceeds: proceeds,
+      pl: Math.round((price - num(hd.cost)) * num(hd.units))
+    });
+    store.delisted = store.delisted.slice(0, 200);
+    delete store.holdings[code];
+    var i = store.party.indexOf(code);
+    if (i >= 0) store.party[i] = "";
+    notes.push({
+      kind: "delist",
+      text: "「" + (u.short || u.name) + "」が上場廃止になりました。最終終値 " + yen(price) + " 円で " +
+        units(hd.units) + " 口ぶんを手放し、" + yen(proceeds) + " 円が資金に戻りました。図鑑の「旅立ち」に記録が残ります。"
+    });
+  });
+  // 契約していないのにパーティへ残っている廃止銘柄も外す
+  for (var i = 0; i < 3; i++) {
+    var pc = store.party[i];
+    if (!pc) continue;
+    var pu = stockOf(pc);
+    if (pu && pu.listed === false) {
+      store.party[i] = "";
+      notes.push({ kind: "delist", text: "「" + (pu.short || pu.name) + "」はもう上場していないので、パーティから外しました。" });
+    }
+  }
+  return notes;
+}
+
+/** 契約中の銘柄の「最後に見た終値」を覚えておく（上場廃止で latest から消えたときの拠りどころ） */
+function touchLast() {
+  Object.keys(store.holdings).forEach(function (c) {
+    var st = stateOf(c);
+    if (st && isFinite(num(st.close, NaN))) store.holdings[c].last = num(st.close);
+  });
+}
+
+// ══════════════ 株式分割・併合（設計書 §8.3）══════════════
+// その日に分割・併合があった銘柄を契約中なら口数と取得単価を調整する（資金価値は保存される）。
+// 計算は KB.adjustHolding に任せる（自分で比を掛け直さない）。
+function applySplits(day, notes) {
+  var evs = Object.create(null);
+  (Array.isArray(day.splits) ? day.splits : []).forEach(function (sp) {
+    if (!sp || sp.code == null) return;
+    if (sp.date && String(sp.date) !== String(day.date)) return;   // 別の日の出来事は蒸し返さない
+    evs[String(sp.code)] = sp;
+  });
+  // 銘柄の状態側に split（比率）だけ入っている形にも対応する
+  Object.keys(store.holdings).forEach(function (code) {
+    if (evs[code]) return;
+    var st = stateOf(code, day), r = st ? num(st.split) : 0;
+    if (r > 0 && r !== 1) evs[code] = { code: code, ratio: r };
+  });
+
+  Object.keys(evs).forEach(function (code) {
+    var hd = store.holdings[code];
+    if (!hd) return;
+    var sp = evs[code];
+    // 分割か併合かは numerator と denominator で決める（比の数値だけで較べると浮動小数で揺れます）。
+    // 5:1 分割なら numerator=5・denominator=1 → n=5。1:2 併合なら numerator=1・denominator=2 → n=2。
+    var nu = num(sp.numerator), de = num(sp.denominator), ev = null;
+    if (nu > 0 && de > 0 && nu !== de) {
+      ev = nu > de ? { kind: "split", n: nu / de } : { kind: "merge", n: de / nu };
+    } else {
+      var ratio = num(sp.ratio);   // numerator/denominator が無い形（銘柄側の split）への予備
+      if (!(ratio > 0) || ratio === 1) return;
+      ev = ratio > 1 ? { kind: "split", n: ratio } : { kind: "merge", n: 1 / ratio };
+    }
+    // 1:4,400,000 のような明らかにおかしい比が混じることがあるので、常識の範囲だけ受け付ける
+    if (!(ev.n > 1.001) || ev.n > 100) {
+      notes.push({
+        kind: "split",
+        text: "「" + (stockOf(code) ? (stockOf(code).short || stockOf(code).name) : code) +
+          "」の分割・併合の比（" + num(sp.numerator) + ":" + num(sp.denominator) +
+          "）が常識の範囲を外れていたので、口数はそのままにしました。"
+      });
+      return;
+    }
+    var before = { units: num(hd.units), cost: num(hd.cost) };
+    var after = KB.adjustHolding(before, ev);
+    hd.units = after.units; hd.cost = after.cost;
+    var u = stockOf(code);
+    var nText = units(ev.n);
+    notes.push({
+      kind: "split",
+      text: "「" + (u ? (u.short || u.name) : code) + "」に" +
+        (ev.kind === "split" ? "株式分割（1 株 → " + nText + " 株）" : "株式併合（" + nText + " 株 → 1 株）") +
+        "がありました。" + units(before.units) + " 口 → " + units(after.units) + " 口、" +
+        "取得単価 " + yen(before.cost) + " → " + yen(after.cost) + " 円（資金の価値は変わりません）。"
+    });
+  });
+}
+
+// ══════════════ 精算（設計書 §7.1）══════════════
+// 開いた時に未処理の営業日をまとめて処理する。日ごとの結果は hash(date) だけで決まるので
+// 順序に依らず、開かなかった日も後から同じ結果で再現できる。
+function settleAll() {
+  var days = pendingDays();
+  if (!days.length) return;
+  if (partyReady() < 3) {
+    openDialog('<h2>パーティが揃っていません</h2><div class="muted">3 体そろえてから精算してください。' +
+      '「市場」で契約して、「編成」で並べます。</div><div class="row" style="margin-top:12px"><button data-tab="market">市場へ</button><button data-close="1">閉じる</button></div>');
+    return;
+  }
+  var btn = $("btn-settle");
+  if (btn) { btn.disabled = true; btn.textContent = "精算しています…"; }
+
+  loadDays(days).then(function () {
+    var out = [], notes = [], skipped = 0;
+    days.forEach(function (date) {
+      var day = D.daily[date];
+      if (!day) { skipped++; store.settledTo = date; return; }   // 読めない日は飛ばす（先へは進める）
+      out.push(settleOneDay(day, notes));
+      store.settledTo = date;
+    });
+    if (skipped) {
+      notes.push({ kind: "skip", text: skipped + " 日ぶんは日次データが見つからなかったので飛ばしました（古い日は年ごとにまとめられています）。" });
+    }
+    touchLast();
+    notes = notes.concat(processDelistings());
+    saveStore();
+    render();
+    if (out.length) showBattle(out[out.length - 1], out.length, notes);
+    else showNotes(notes);
+  });
+}
+
+function settleOneDay(day, notes) {
+  var date = day.date;
+
+  // 分割・併合を先に反映してから、その日の対戦に入る
+  applySplits(day, notes);
+
+  // シーズンの切り替わり（月＝1 シーズン）
+  var sid = seasonIdOf(date);
+  if (store.season.id && store.season.id !== sid) closeSeason(notes);
+  if (store.season.id !== sid) store.season = blankSeason(sid);
+
+  var preds = store.predict[date] || {};
+  var gain = 0, hits = 0, misses = 0;
+
+  // 予想の答え合わせ（±0.3% 以内は引き分け＝外れ扱いにしない）
+  var extras = {};
+  store.party.forEach(function (code) {
+    if (!code || !stateOf(code, day)) return;
+    var p = preds[code];
+    var chg = num(stateOf(code, day).chg1);
+    var actual = chg > 0.003 ? "up" : chg < -0.003 ? "down" : "flat";
+    var ex = {};
+    if (p) {
+      if (actual === "flat" || p === actual) {
+        if (p === actual) { ex.hit = true; hits++; gain += 300; store.streak[code] = num(store.streak[code]) + 1; }
+      } else { ex.hit = false; misses++; store.streak[code] = 0; }
+    }
+    extras[code] = ex;
+  });
+  if (hits === store.party.length && hits > 0) gain += 500;   // パーティ全的中のボーナス
+
+  // 自軍と、その日の相場そのものである敵軍
+  var mine = store.party.map(function (c) { return todayOf(c, day, extras[c] || {}); });
+  var p = KB.protagonists(day);
+  var foeCodes = [p.up, p.hot, p.down].filter(Boolean);
+  while (foeCodes.length < 3) foeCodes.push(foeCodes[0]);
+  var myRare = mine.reduce(function (s, b) { return s + b.kabu.rare; }, 0) / mine.length;
+  var foes = foeCodes.slice(0, 3).map(function (c) {
+    var b = todayOf(c, day, {});
+    return KB.scaleToParty(b, myRare, b.kabu.rare);
+  });
+
+  var sqA = KB.squadOf(mine), sqB = KB.squadOf(foes);
+  var res = CB.squadMatch(sqA, sqB, KB.hashStr(date));
+  var win = res.scoreA > res.scoreB;
+
+  // 稼ぎ: 相手の強さに応じて 500〜5000
+  var foeStrength = foes.reduce(function (s, b) { return s + b.total; }, 0) / 3;
+  if (win) gain += Math.round(500 + Math.max(0, Math.min(1, (foeStrength - 30) / 60)) * 4500);
+
+  store.cash += gain;
+  store.stats.days++;
+  store.stats.hits += hits; store.stats.misses += misses;
+  if (win) { store.stats.wins++; store.stats.streak++; store.stats.best = Math.max(store.stats.best, store.stats.streak); }
+  else { store.stats.losses++; store.stats.streak = 0; }
+
+  // シーズンの積み上げ（勝ち点・予想・編成の傾向。称号の材料）
+  var se = store.season;
+  var tags = mine.reduce(function (a, b) { return a.concat(b.kabu.tags || []); }, []);
+  var traits = mine.reduce(function (a, b) { return a.concat(b.kabu.traitKeys || []); }, []);
+  var uniqElems = new Set(mine.map(function (b) { return b.elem; })).size;
+  se.days++; se.gain += gain; se.hits += hits; se.misses += misses;
+  if (win) { se.wins++; se.points += 3; } else se.losses++;
+  se.best = Math.max(num(se.best), store.stats.streak);
+  if (tags.indexOf("注目") >= 0 || tags.indexOf("ストップ高") >= 0) se.hotDays++;
+  if (traits.indexOf("regen") >= 0) se.divDays++;
+  if (uniqElems >= 3) se.spreadDays++;
+  if (uniqElems === 1) se.focusDays++;
+  if (win && tags.indexOf("逆境") >= 0) se.comebacks++;
+  se.peakAssets = Math.max(num(se.peakAssets), store.cash + heldValue());
+
+  awardTitles(date, notes);
+
+  var record = {
+    date: date, win: win, scoreA: res.scoreA, scoreB: res.scoreB, gain: gain,
+    foe: foeCodes.slice(0, 3).map(function (c) { return stockOf(c) ? stockOf(c).short : c; }).join("・"),
+    mine: mine.map(function (b) { return b.name; }),
+    hits: hits, misses: misses
+  };
+  store.results.unshift(record);
+  store.results = store.results.slice(0, 60);
+  delete store.predict[date];
+
+  return { record: record, res: res, mine: mine, foes: foes };
+}
+
+// ══════════════ 対戦の再生（ログ表示）══════════════
+function notesHtml(notes) {
+  if (!notes || !notes.length) return "";
+  return '<h3 style="margin-top:12px">この間に起きたこと</h3><ul class="notes">' +
+    notes.map(function (n) { return '<li>' + esc(n.text) + '</li>'; }).join("") + '</ul>';
+}
+
+function showNotes(notes) {
+  if (!notes || !notes.length) return;
+  openDialog('<h2>お知らせ</h2>' + notesHtml(notes) +
+    '<div class="row" style="margin-top:12px"><button data-close="1">閉じる</button></div>');
+}
+
+function showBattle(out, dayCount, notes) {
+  var r = out.res, rec = out.record;
+  var h = [];
+  h.push('<h2>' + esc(rec.date) + ' の対戦' + (dayCount > 1 ? '（' + dayCount + ' 日ぶんを精算しました）' : '') + '</h2>');
+  h.push('<div class="row" style="margin:8px 0">' +
+    '<span class="' + (rec.win ? "up" : "down") + '" style="font-size:18px;font-weight:800">' +
+    (rec.win ? "勝ち" : "負け") + ' ' + rec.scoreA + ' - ' + rec.scoreB + '</span>' +
+    '<span class="muted">獲得 <b class="num">' + yen(rec.gain) + '</b> 円</span>' +
+    (rec.hits ? '<span class="tag on">予想的中 ' + rec.hits + '</span>' : "") +
+    (rec.misses ? '<span class="tag">予想外れ ' + rec.misses + '</span>' : "") + '</div>');
+
+  h.push(notesHtml(notes));
+
+  h.push('<div class="row" style="gap:16px;margin-bottom:8px">');
+  [["自軍", out.mine], ["その日の相場", out.foes]].forEach(function (side) {
+    h.push('<div style="flex:1;min-width:140px"><div class="small muted">' + side[0] + '</div>' +
+      side[1].map(function (b) {
+        return '<div class="small"><span class="' + elClass(b.elem) + '">' + b.element.name + '</span> ' + esc(b.name) + '</div>';
+      }).join("") + '</div>');
+  });
+  h.push('</div>');
+
+  h.push('<div class="log">');
+  r.games.forEach(function (g, i) {
+    h.push('<div class="gsep">第 ' + (i + 1) + ' 戦 — ' + (g.winnerSide === "A" ? "自軍" : "相手") + 'の勝ち（' +
+      g.turns + ' ターン・' + esc(g.decision) + '）</div>');
+    g.log.forEach(function (e) { h.push(logLine(e)); });
+  });
+  h.push('</div>');
+  h.push('<div class="row" style="margin-top:12px"><button data-close="1">閉じる</button></div>');
+  openDialog(h.join(""));
+}
+
+// エンジンは 1 行ぶんの文面を e.m に組み立て済み（誰の・どの技・何ダメージ・会心・有利/不利・吸収・連撃）。
+// こちらは種別（e.t）で色を決めるだけにする。文面を自前で作り直すと、技名も属性相性も取りこぼす。
+function logLine(e) {
+  if (!e || !e.m) return "";
+  var t = e.t, k;
+  if (t === "note") k = "note";
+  else if (t === "crit" || t === "finisher") k = "crit";
+  else if (t === "miss") k = "miss";
+  else if (t === "dot") k = "miss";
+  else if (t === "buff") k = /倒れる/.test(e.m) ? "ko" : "note";
+  else k = "hit";
+  // 自軍の行だけ左に印を付ける（どちらが動いたかを目で追えるように）
+  var mark = e.s === "A" ? "▸ " : "　";
+  return '<div class="' + k + '">' + mark + esc(e.m) + '</div>';
+}
+
+// ══════════════ 契約 ══════════════
+function buy(code) {
+  var st = stateOf(code), u = stockOf(code);
+  if (!st || !u || u.listed === false || store.cash < num(st.close)) return;
+  store.cash -= num(st.close);
+  var hd = store.holdings[code];
+  if (hd) {
+    hd.cost = (hd.cost * hd.units + num(st.close)) / (hd.units + 1);
+    hd.units += 1;
+    hd.last = num(st.close);
+  } else store.holdings[code] = { units: 1, cost: num(st.close), last: num(st.close) };
+  // 空きがあればパーティにも入れる
+  var i = store.party.indexOf("");
+  if (i >= 0 && store.party.indexOf(code) < 0) store.party[i] = code;
+  saveStore(); render();
+}
+
+function sell(code) {
+  var hd = store.holdings[code], st = stateOf(code);
+  if (!hd || !st) return;
+  var n = Math.min(1, hd.units);         // 併合で 1 口未満になっていることがある
+  store.cash += num(st.close) * n;
+  hd.units -= n;
+  store.season.sells = num(store.season.sells) + 1;
+  if (hd.units <= 1e-9) {
+    delete store.holdings[code];
+    var i = store.party.indexOf(code);
+    if (i >= 0) store.party[i] = "";
+  }
+  saveStore(); render();
+}
+
+// ══════════════ セーブの持ち出し ══════════════
+function exportSave() {
+  var blob = new Blob([JSON.stringify(store, null, 1)], { type: "application/json" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "kabubattle-" + D.latest.date + ".json";
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+}
+
+function importSave() {
+  var inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json,.json";
+  inp.onchange = function () {
+    var f = inp.files && inp.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var j = JSON.parse(String(rd.result));
+        if (!j || j.v !== 1) throw new Error("読めない形式です");
+        localStorage.setItem(SAVE_KEY, JSON.stringify(j));
+        loadStore(); render();
+        openDialog('<h2>読み込みました</h2><div class="row" style="margin-top:12px"><button data-close="1">閉じる</button></div>');
+      } catch (e) {
+        openDialog('<h2>読み込めません</h2><div class="muted">' + esc(e.message) + '</div>' +
+          '<div class="row" style="margin-top:12px"><button data-close="1">閉じる</button></div>');
+      }
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+
+// ══════════════ 操作 ══════════════
+document.addEventListener("click", function (ev) {
+  var t = ev.target.closest("[data-tab],[data-code],[data-buy],[data-sell],[data-sort],[data-slotin],[data-unslot],[data-pred],[data-close],[data-more],#btn-settle,#btn-export,#btn-import,#btn-reset");
+  if (!t) return;
+
+  if (t.hasAttribute("data-close")) { ev.preventDefault(); dlgCode = ""; $("dlg").close(); return; }
+  if (t.id === "btn-settle") { ev.preventDefault(); settleAll(); return; }
+  if (t.id === "btn-export") { ev.preventDefault(); exportSave(); return; }
+  if (t.id === "btn-import") { ev.preventDefault(); importSave(); return; }
+  if (t.id === "btn-reset") {
+    ev.preventDefault();
+    openDialog('<h2>最初からやり直しますか</h2><div class="muted">資金・契約・戦績・称号がすべて消えます。取り消せません。</div>' +
+      '<div class="row" style="margin-top:12px"><button id="btn-reset-yes">やり直す</button><button data-close="1">やめる</button></div>');
+    var y = $("btn-reset-yes");
+    if (y) y.onclick = function () {
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+      store = blankStore(); saveStore(); $("dlg").close(); render();
+    };
+    return;
+  }
+  if (t.hasAttribute("data-more")) {
+    ev.preventDefault();
+    var which = t.getAttribute("data-more");
+    if (which === "market") marketQ.limit += 100; else bookQ.limit += 100;
+    render(); return;
+  }
+  if (t.hasAttribute("data-tab")) { ev.preventDefault(); tab = t.getAttribute("data-tab"); dlgCode = ""; $("dlg").close(); render(); return; }
+  if (t.hasAttribute("data-buy")) { ev.preventDefault(); buy(t.getAttribute("data-buy")); if ($("dlg").open) showStock(t.getAttribute("data-buy")); return; }
+  if (t.hasAttribute("data-sell")) {
+    ev.preventDefault();
+    var sc = t.getAttribute("data-sell");
+    sell(sc);
+    if ($("dlg").open) { if (store.holdings[sc] || stateOf(sc)) showStock(sc); else { dlgCode = ""; $("dlg").close(); } }
+    return;
+  }
+  if (t.hasAttribute("data-sort")) {
+    var k = t.getAttribute("data-sort");
+    if (marketSort.key === k) marketSort.desc = !marketSort.desc; else { marketSort.key = k; marketSort.desc = true; }
+    render(); return;
+  }
+  if (t.hasAttribute("data-slotin")) {
+    ev.preventDefault();
+    var code = t.getAttribute("data-slotin");
+    var i = store.party.indexOf("");
+    if (i < 0) i = 2;
+    store.party[i] = code; saveStore(); render(); return;
+  }
+  if (t.hasAttribute("data-unslot")) { ev.preventDefault(); store.party[Number(t.getAttribute("data-unslot"))] = ""; saveStore(); render(); return; }
+  if (t.hasAttribute("data-pred")) {
+    ev.preventDefault();
+    var c = t.getAttribute("data-pred"), v = t.getAttribute("data-val");
+    var d = D.latest.date;
+    store.predict[d] = store.predict[d] || {};
+    if (store.predict[d][c] === v) delete store.predict[d][c]; else store.predict[d][c] = v;
+    saveStore(); render(); return;
+  }
+  if (t.hasAttribute("data-code")) { ev.preventDefault(); showStock(t.getAttribute("data-code")); return; }
+});
+
+// 検索欄（打つたびに絞り込む）
+document.addEventListener("input", function (ev) {
+  var t = ev.target;
+  if (t.id === "mkt-q") { marketQ.q = t.value; marketQ.limit = 100; renderKeepFocus(t); }
+  else if (t.id === "book-q") { bookQ.q = t.value; bookQ.limit = 100; renderKeepFocus(t); }
+});
+
+// 絞り込みの選択肢
+document.addEventListener("change", function (ev) {
+  var t = ev.target, id = t.id || "";
+  var q = id.indexOf("mkt-") === 0 ? marketQ : (id.indexOf("book-") === 0 ? bookQ : null);
+  if (!q) return;
+  var key = id.slice(id.indexOf("-") + 1);
+  if (key === "elem") q.elem = t.value;
+  else if (key === "rare") q.rare = t.value;
+  else if (key === "idx") q.idx = t.value;
+  else if (key === "fin") q.fin = t.value;
+  else if (key === "held") q.held = !!t.checked;
+  else return;
+  q.limit = 100;
+  render();
+});
+
+// ══════════════ 起動 ══════════════
+function fail(msg) {
+  $("main").innerHTML = '<div class="card"><h2>データが読めません</h2><div class="muted">' + esc(msg) +
+    '</div><div class="muted small" style="margin-top:8px">' +
+    'ローカルのファイルを直接開くとブラウザの制限で読み込めません。' +
+    '公開ページ（https://ksaga115.github.io/KabuBattle/）か、ローカルなら簡易サーバー越しに開いてください。</div></div>';
+}
+
+Promise.all([
+  loadJson("kabu/universe.json"),
+  loadJson("kabu/data/latest.json"),
+  loadJson("kabu/moves.json").catch(function () { return null; }),
+  // 日次の履歴の目次。まだ無いこともある（その場合は latest.json の 1 日だけを精算する）
+  loadJson("kabu/data/index.json").catch(function () { return null; })
+]).then(function (r) {
+  D.universe = r[0]; D.latest = r[1]; D.moves = r[2]; D.index = r[3];
+  if (!D.universe || !D.universe.stocks) throw new Error("universe.json に stocks がありません");
+  if (!D.latest || !D.latest.stocks || !D.latest.date) throw new Error("latest.json が壊れています");
+  computeTop10();
+  computeIdxOptions();
+  loadStore();
+  // 上場廃止の後始末は起動時に一度だけ（設計書 §8.4）。何が起きたかは必ず画面に出す。
+  touchLast();
+  var notes = processDelistings();
+  saveStore();
+  render();
+  if (notes.length) showNotes(notes);
+}).catch(function (e) { fail(e.message); });
+
+})();
+</script>
+</body>
+</html>

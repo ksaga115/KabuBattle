@@ -18,7 +18,7 @@
   "bps": 2293.6877853806654,
   "div": 62,
   "salesGrowth": 0.029333395260736195,
-  "opmStd": 0.007691004650011122,
+  "opmStd": 0,
   "sources": {
    "salesGrowth": "年次の前年比",
    "opmStd": "年次",

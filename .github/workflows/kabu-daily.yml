@@ -1,0 +1,57 @@
+# 平日の引け後に日足を取って「今日の状態」を更新する。設計書 §1・§7.1。
+# 失敗したらコミットしない（壊れた JSON がゲームに届かないようにする）。
+# 失敗が続けば GitHub から通知メールが来る＝止まったことに気づける（§8.5）。
+name: kabu-daily
+
+on:
+  schedule:
+    # cron は UTC。16:30 JST = 07:30 UTC。東証の引けは 15:30 JST なので 1 時間の余裕を取る。
+    - cron: "30 7 * * 1-5"
+  workflow_dispatch:      # 手で回せるようにしておく（休場明けの取りこぼしなど）
+
+# 生成した JSON をこのリポジトリに push する
+permissions:
+  contents: write
+
+concurrency:
+  group: kabu-data        # 日次と週次が同時に走って push がぶつからないようにする
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    # 全上場企業（約 3,535 銘柄）を同時 10 本で取ると手元の実測で 50 秒、
+    # validate が 3,531 銘柄ぶんの個体を組んで 20 秒。Actions は外部 API が遅い日があるので
+    # 実測の 10 倍を上限にしておく（遅い日に落ちるより、遅くても取れたほうがよい）。
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 対戦エンジン（BarcodeTool.html の固定コミット）の取得キャッシュ。
+      # 中身は vendor/BarcodeTool.commit の sha256 で照合するので、キャッシュが古くても事故らない。
+      - uses: actions/cache@v4
+        with:
+          path: vendor/cache
+          key: vendor-cb-${{ hashFiles('vendor/BarcodeTool.commit') }}
+
+      - name: 日足を取って latest.json を作る
+        run: node scripts/kabu/fetch-prices.mjs
+
+      - name: 検証（ここで落ちたらコミットしない）
+        run: node scripts/kabu/validate.mjs
+
+      - name: コミット
+        run: |
+          if git diff --quiet -- kabu/data; then
+            echo "変更なし（休場日か、同じ日を二度取った）"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add kabu/data
+          git commit -m "データ: $(node -p "require('./kabu/data/latest.json').date") の状態を更新"
+          git push

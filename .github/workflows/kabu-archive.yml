@@ -1,0 +1,58 @@
+# 年に一度、古い年の日次スナップショットを 1 ファイルに畳む。設計書 §8.7。
+# daily/ は年 15MB 前後まで増えるので、ゲームが読まなくなった年（今年・去年より前）は
+# daily/<年>.jsonl.gz にまとめる。畳んだ年は index.json の archived に載る。
+name: kabu-archive
+
+on:
+  schedule:
+    # cron は UTC。1 月 10 日 21:00 UTC = 1 月 11 日 06:00 JST（1 月の第 2 週・年に 1 回）。
+    # 年明けに走らせても「今年と去年」は畳まないので、直近 60 日は必ず日次のまま残る。
+    - cron: "0 21 10 1 *"
+  workflow_dispatch:      # 手で回せるようにしておく（--year を使いたい時はローカルで）
+
+# 畳んだ結果をこのリポジトリに push する
+permissions:
+  contents: write
+
+concurrency:
+  group: kabu-data        # 日次・週次と同時に走って push がぶつからないようにする
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 対戦エンジン（BarcodeTool.html の固定コミット）の取得キャッシュ。
+      # 中身は vendor/BarcodeTool.commit の sha256 で照合するので、キャッシュが古くても事故らない。
+      - uses: actions/cache@v4
+        with:
+          path: vendor/cache
+          key: vendor-cb-${{ hashFiles('vendor/BarcodeTool.commit') }}
+
+      # 畳める年が無ければ「無い」と言って正常終了する（毎年 1 回走るので空振りが普通）
+      - name: 古い年を畳む
+        run: node scripts/kabu/archive.mjs
+
+      - name: 検証（ここで落ちたらコミットしない）
+        run: node scripts/kabu/validate.mjs
+
+      - name: コミット
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # 新しく作る <年>.jsonl.gz は追跡外なので、先に add して索引と比べる
+          # （日次と違って「消した・増えた」が主なので git diff だけでは見落とす）
+          git add -A kabu/data
+          if git diff --cached --quiet; then
+            echo "変更なし（畳める年が無かった）"
+            exit 0
+          fi
+          git commit -m "データ: 古い年の日次スナップショットを畳んだ（$(node -p "require('./kabu/data/index.json').archived.join('・')")）"
+          git push

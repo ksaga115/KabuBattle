@@ -1,0 +1,41 @@
+# push / PR のたびに、データとゲームの不変条件を確かめる。設計書 §11。
+# データ更新のワークフローが回す validate と同じものに加えて、シム（決定論・対称・停止性・
+# 勝率曲線・分割検出）とビルドが通ることまで見る。
+name: kabu-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/cache@v4
+        with:
+          path: vendor/cache
+          key: vendor-cb-${{ hashFiles('vendor/BarcodeTool.commit') }}
+
+      - name: 検証（データの形と不変条件）
+        run: node scripts/kabu/validate.mjs
+
+      - name: シム（決定論・A/B 対称・停止性・勝率曲線・分割検出）
+        run: node scripts/kabu/sim.mjs
+
+      # ビルドが通り、かつコミット済みの index.html がソースと一致していること。
+      # ずれていたら「ソースだけ直して index.html を焼き直し忘れている」ので知らせる。
+      # ビルド日付は毎日変わるので --check がその行だけ比較から外す。
+      - name: ビルド（index.html がソースと一致しているか）
+        run: node scripts/build-kabu.mjs --check

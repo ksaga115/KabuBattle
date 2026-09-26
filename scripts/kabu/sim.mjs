@@ -617,11 +617,12 @@ if (!REAL) {
     const s = REAL.L.stocks[c] || {};
     const fid = (typeof s.fiscalId === "string" && s.fiscalId) || ((REAL.finOf(c) || {}).fiscalId);
     if (!fid || typeof KB.estimatedEarningsDate !== "function") { noFiscal++; continue; }
-    const e = KB.estimatedEarningsDate(fid);
-    if (e) estDays[e] = (estDays[e] || 0) + 1; else noFiscal++;
+    // 決算日は「四半期末 + 35〜45 日」の帯。戻り値は {from, to} なので帯の頭で数える
+    const e = KB.estimatedEarningsDate(fid, REAL.L.date);
+    if (e && e.from) estDays[e.from] = (estDays[e.from] || 0) + 1; else noFiscal++;
   }
   const uniq = Object.keys(estDays).sort();
-  console.log(`       今日が決算日（推定）の銘柄 ${earnAll} / ${REAL.codes.length} 件（fiscalId +${KB.EARNINGS_LAG_DAYS != null ? KB.EARNINGS_LAG_DAYS : "?"} 日、前後 1 日）`);
+  console.log(`       今日が決算日（推定）の銘柄 ${earnAll} / ${REAL.codes.length} 件（四半期末 +${KB.EARNINGS_FROM}〜${KB.EARNINGS_TO} 日）`);
   console.log(`       決算日の推定が付く ${REAL.codes.length - noFiscal} 銘柄 → 相異なる推定日 ${uniq.length} 日: ${uniq.slice(0, 6).join(" ")}${uniq.length > 6 ? " …" : ""}`);
   soft(uniq.length === 0 || uniq.length >= 4,
     "決算日の推定がばらけている（決算日ボスが年に何度も来る）",

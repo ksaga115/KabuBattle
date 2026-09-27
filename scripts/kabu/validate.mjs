@@ -440,8 +440,11 @@ if (universe && latest) {
       const b = KB.buildFromStock({ code: c, u: universe.stocks[c], fin: f, state: st, moves, date: latest.date, mcapTop10: top10.has(c) });
       built++;
       for (const k of CB.STAT_KEYS) if (!(b.stats[k] >= 24 && b.stats[k] <= 100)) statBad.push(`${c} ${k}=${b.stats[k]}`);
+      // 設計書 §6.2 の 18 種はエンジンがそのまま効かせる（§17 で取り込んだので丸め込みなし）
       if (!b.moves.length) moveBad.push(c);
-      for (const m of b.moves) if (!["strike", "crit", "pierce", "drain", "finisher"].includes(m.kind)) moveBad.push(`${c} ${m.name}(${m.kind})`);
+      for (const m of b.moves) if (!KB.ENGINE_KINDS[m.kind]) moveBad.push(`${c} ${m.name}(${m.kind})`);
+      // 補助技しか持たない銘柄がいると、その銘柄は永久に殴れない
+      if (b.moves.length && !b.moves.some((m) => KB.DAMAGING_KINDS[m.kind])) moveBad.push(`${c} 攻撃手段なし`);
       // 状態を乗せても壊れないこと
       KB.applyMods(b, KB.stateMods(st, latest.market, {}));
 
@@ -496,8 +499,8 @@ if (universe && latest) {
   else good(`${built} 銘柄すべてが例外なく個体になる（${((Date.now() - t0) / 1000).toFixed(1)}s）`);
   if (statBad.length) { bad(`ステータスが 24..100 を外れた ${statBad.length} 件`); for (const s of statBad.slice(0, 10)) console.log(`         ${s}`); }
   else good("全銘柄のステータスが 24..100");
-  if (moveBad.length) { bad(`エンジンが扱えない技 ${moveBad.length} 件`); for (const m of moveBad.slice(0, 10)) console.log(`         ${m}`); }
-  else good("全銘柄の技がエンジンの 5 種に落ちている");
+  if (moveBad.length) { bad(`エンジンが扱えない技・攻撃手段なし ${moveBad.length} 件`); for (const m of moveBad.slice(0, 10)) console.log(`         ${m}`); }
+  else good(`全銘柄の技をエンジンがそのまま効かせる（${Object.keys(KB.ENGINE_KINDS).length} 種）`);
 
   // ── 焼き込まれた素体の報告 ──
   // 焼き込みがまだ無い latest.json は「注意」まで（データ層の作業中かもしれない）。

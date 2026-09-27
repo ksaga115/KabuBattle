@@ -99,17 +99,20 @@ section("2. 素体（決算 → ステータス）");
 // ══════════════ 3. 技 ══════════════
 section("3. 技");
 {
-  const ENGINE = ["strike", "crit", "pierce", "drain", "finisher"];
-  let allEngine = true, hasSector = true;
+  // 設計書 §6.2 の 18 種はエンジンが全部そのまま効かせる（§17 で取り込んだので丸め込みなし）
+  const ENGINE = Object.keys(KB.ENGINE_KINDS);
+  let allEngine = true, hasSector = true, canAttack = true, badKinds = new Set();
   for (const code of codes) {
     const b = buildAt(code);
     if (!b.moves.length) hasSector = false;
-    for (const m of b.moves) if (!ENGINE.includes(m.kind)) allEngine = false;
+    for (const m of b.moves) if (!ENGINE.includes(m.kind)) { allEngine = false; badKinds.add(m.kind); }
+    // 補助技（盾・回復・毒など）しか持たない銘柄がいると、その銘柄は永久に殴れない
+    if (!b.moves.some((m) => KB.DAMAGING_KINDS[m.kind])) canAttack = false;
   }
-  ok(allEngine, "moves.json の全 kind が、エンジンが実際に効かせる 5 種に落ちる");
+  ok(allEngine, `moves.json の全 kind をエンジンがそのまま効かせる（${ENGINE.length} 種）`,
+    badKinds.size ? `未知: ${[...badKinds].join(",")}` : "");
   ok(hasSector, "固有技が無い銘柄でも技が 1 つ以上ある（業種技で戦える）");
-  ok(Object.keys(KB.KIND_FALLBACK).every((k) => ENGINE.includes(KB.engineKind(k))),
-    "設計書 §6.2 の拡張 kind すべてに落とし先がある", `${Object.keys(KB.KIND_FALLBACK).length} 種`);
+  ok(canAttack, "どの銘柄も攻撃手段を 1 つは持つ（補助技だけの銘柄がいない）");
   ok(b0ElemIsOwn(), "1 本目（業種技）は自分の属性（十八番）");
 
   // 技が 2 本しかないと 5 属性のうち 2 つしかカバーできず、相手の属性だけで勝敗が決まりすぎる

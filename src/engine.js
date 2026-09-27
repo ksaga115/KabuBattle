@@ -276,7 +276,18 @@ const CB = (function () {
     drain: "与えたダメージの一部を回復する",
     finisher: "自分が瀕死のときだけ選ばれる、大威力の一発逆転技"
   };
-  const MOVE_POWER = { strike: 1.00, crit: 0.90, pierce: 0.95, drain: 0.88, finisher: 1.75 };
+  // 技の威力。moves.json が pow を持っていればそちらが優先で、ここは既定値。
+  // 後半は株バトルで足した種類（設計書 §6.2）。1v1 の battle() は build() が作る
+  // 5 種しか使わないので、増やしても向こうの挙動は変わらない。
+  const MOVE_POWER = {
+    strike: 1.00, crit: 0.90, pierce: 0.95, drain: 0.88, finisher: 1.75,
+    multi: 0.58,    // 1 発ぶん（2〜3 回当たる）
+    sure: 0.85,     // 必中のぶん低め
+    first: 0.90,
+    stack: 0.80,
+    gamble: 1.00,   // これに 0〜maxMult 倍が乗る
+    counter: 1.00
+  };
   // 技の種類を選ぶときの重み付きプール。捨身の一撃は「持っている個体の方が少ない」珍しさにする。
   const MOVE_KIND_POOL = ["strike", "strike", "strike", "strike", "crit", "crit", "crit", "pierce", "pierce", "pierce", "drain", "drain", "drain", "finisher"];
 
@@ -865,63 +876,259 @@ const CB = (function () {
     if (auB.synergies.length) push({ t: "note", s: "B", r: 0, m: "B隊: " + auB.synergies.join("・") });
     if (despSide) push({ t: "note", s: despSide, r: 0, m: (despSide === "A" ? "A隊" : "B隊") + " は背水の陣（このゲームは粘る）" });
 
-    /** 技を自動で選ぶ。瀕死なら捨身の一撃、それ以外は相手への相性が良い技を優先。 */
+    // ══════════════ 技の効果（株バトル §6.2 の 18 種）══════════════
+    // もとの CB は strike / crit / pierce / drain / finisher の 5 種しか効かせず、
+    // 株バトル側は残りを近いものに丸めていた（技名だけ違って中身が同じ）。
+    // エンジンを取り込んだので、設計書 §6.2 の語彙をそのまま実装する。
+    //
+    // 数値は moves.json が持つ（pow / min / max / add / cap / maxMult / turns / cut /
+    // ratio / rate / stat / mult / critAdd / pierce / drain）。ここは既定値だけ持つ。
+
+    const num = function (v, d) { const n = Number(v); return isFinite(n) ? n : (d === undefined ? 0 : d); };
+
+    /** 継続効果を置く場所。個体そのものは触らない（素体は不変） */
+    function initEffects(f) {
+      f.stack = 0;          // stack で積んだ攻の加算
+      f.shieldCut = 0;      // 被ダメ軽減
+      f.shieldT = 0;
+      f.reflect = 0;        // 次の被弾の反射率
+      f.dots = [];          // [{rate, turns, by}]
+      f.debuffs = [];       // [{stat, cut, turns}]
+      f.delayed = [];       // [{pow, turns, elem, name}]
+      f.goFirst = false;    // 次のターン必ず先手
+      f.guard = false;      // counter: このターン回避に専念
+      f.regenRate = 0;      // 毎ターンの自己回復
+    }
+    LA.forEach(initEffects); LB.forEach(initEffects);
+
+    /** debuff と stack を乗せた実効値。素の atk/def/spd は書き換えない */
+    function eff(f, key) {
+      let v = f[key] + (key === "atk" ? f.stack : 0);
+      for (let i = 0; i < f.debuffs.length; i++) if (f.debuffs[i].stat === key) v *= (1 - f.debuffs[i].cut);
+      return Math.max(1, v);
+    }
+
+    const DAMAGING = { strike: 1, crit: 1, pierce: 1, drain: 1, multi: 1, sure: 1, first: 1, stack: 1, gamble: 1, counter: 1, finisher: 1 };
+
+    /**
+     * その技がいまどれだけ「打ちたい」か。攻撃技は相性 × 威力、
+     * 補助技は効く場面でだけ高くなる（回復を満タンで撃たない、盾を二重に張らない）。
+     */
+    function moveScore(m, at, df) {
+      const k = m.kind;
+      if (DAMAGING[k]) {
+        const pow = num(m.pow, MOVE_POWER[k] != null ? MOVE_POWER[k] : 1);
+        // 1 手で何発ぶん入るかを見込む。連撃は 1 発が軽くても合計は重い、
+        // 博打は当たり外れの真ん中で見る（見込まないと連撃と博打が永久に選ばれない）
+        let expected = pow;
+        if (k === "multi") expected *= (Math.max(1, num(m.min, 2)) + Math.max(1, num(m.max, 3))) / 2;
+        else if (k === "gamble") expected *= num(m.maxMult, 2.4) / 2;
+        else if (k === "finisher") expected *= num(m.mult, 1);
+        else if (k === "stack") expected += at.stack * 0.004;   // 積み上がっているほど価値が出る
+        return affinity(m.elem, df.elem) * expected;
+      }
+      if (k === "heal") return at.hp / at.maxHp < 0.55 ? 1.25 * (1 - at.hp / at.maxHp) * 2 : -1;
+      if (k === "shield") return at.shieldT > 0 ? -1 : 0.95;
+      if (k === "regen") return at.regenRate > 0 ? -1 : 0.9;
+      if (k === "reflect") return at.reflect > 0 ? -1 : 0.9;
+      if (k === "dot") return df.dots.length ? -1 : 1.05;
+      if (k === "debuff") return df.debuffs.length >= 2 ? -1 : 1.0;
+      if (k === "delay") return at.delayed.length ? -1 : 1.15;
+      // 相手が守り寄りのときだけ入れ替える意味がある
+      if (k === "swap") return eff(df, "def") > eff(df, "atk") * 1.15 ? 1.2 : -1;
+      return 0.9;
+    }
+
+    /** 技を自動で選ぶ。瀕死なら捨身の一撃、それ以外は場面に合う技を優先。 */
     function chooseMove(at, df) {
       const list = at.moves;
       if (!list || !list.length) return { elem: at.elem, element: ELEMENTS[at.elem], kind: "strike", name: "一撃" };
       const finisher = list.find(function (m) { return m.kind === "finisher"; });
       const finThresh = at.desperate ? 0.28 : 0.18;
       if (finisher && at.hp / at.maxHp <= finThresh) return finisher;
-      let best = null, bestScore = -1;
+      let best = null, bestScore = -Infinity;
       for (let i = 0; i < list.length; i++) {
         const m = list[i];
         if (m.kind === "finisher") continue;
-        const score = affinity(m.elem, df.elem) * (MOVE_POWER[m.kind] || 1) + rnd() * 0.06;
+        const score = moveScore(m, at, df) + rnd() * 0.06;
         if (score > bestScore) { bestScore = score; best = m; }
+      }
+      // どれも場面に合わないなら、素直に殴れる技を選ぶ
+      if (!best || bestScore < 0) {
+        for (let i = 0; i < list.length; i++) if (DAMAGING[list[i].kind]) return list[i];
       }
       return best || list[0];
     }
 
-    function hit(at, df, myAura, foeAura) {
-      const move = chooseMove(at, df);
-      let ev = 0.035 + (df.spd - at.spd) * 0.0050 - at.tec * 0.0018;
-      if (df.trait === "serene") ev += 0.05;
-      if (df.trait === "swift") ev += 0.03;
-      ev = clamp(ev, 0.01, 0.38);
-      if (rnd() < ev) { df.dodges++; return { dodge: true, dmg: 0, aff: 1, move: move }; }
-
-      let base = at.atk * 0.92 * (MOVE_POWER[move.kind] || 1) * myAura.dmgMul;
+    /** ダメージの本体。1 発ぶん。 */
+    function strike(at, df, move, myAura, foeAura, powMul) {
+      let base = eff(at, "atk") * 0.92 * num(move.pow, MOVE_POWER[move.kind] != null ? MOVE_POWER[move.kind] : 1) * myAura.dmgMul * (powMul || 1);
       if (at.trait === "fang") base *= 1.12;
       if (at.trait === "crush") base *= 1.25;
-      if (at.trait === "gale") base *= (1 + at.spd * 0.0035);
+      if (at.trait === "gale") base *= (1 + eff(at, "spd") * 0.0035);
       if (at.trait === "focus") base *= (1 + at.tec * 0.0026);
       if (at.trait === "wrath" && at.hp / at.maxHp < 0.35) base *= 1.35;
       if (at.desperate) base *= 1.05;
+      if (move.kind === "finisher") base *= num(move.mult, 1);
 
-      let defEff = df.def * (1 - df.defDrop) * (1 - Math.min(0.36, at.tec / 100 * 0.22 + myAura.pierce + (move.kind === "pierce" ? 0.14 : 0)));
+      // sure（必中）は守りもバフも抜けない代わりに威力が低い。§6.2 の「必中・バフデバフ無視」
+      const ignoreDef = move.kind === "sure";
+      const extraPierce = move.kind === "pierce" ? num(move.pierce, 0.14) : 0;
+      let defEff = ignoreDef ? 0
+        : eff(df, "def") * (1 - df.defDrop) * (1 - Math.min(0.55, at.tec / 100 * 0.22 + myAura.pierce + extraPierce));
       if (at.trait === "calc") defEff *= 0.68;
       if (df.trait === "wall") base *= 0.88;
       if (df.trait === "serene") base *= 0.96;
 
-      const aff = affinity(move.elem, df.elem);
+      const aff = move.kind === "sure" ? 1 : affinity(move.elem, df.elem);
       let dmg = base * (150 / (150 + defEff * 1.35));
       dmg += at.tec * 0.55;                 // 確定ダメージ（技）
-      dmg *= aff * foeAura.takenMul;
+      dmg *= aff * (move.kind === "sure" ? 1 : foeAura.takenMul);
       let spread = clamp(0.17 * (1 + at.luk / 100 * 0.95 - at.tec / 100 * 0.70), 0.05, 0.32);
       spread *= (1 - Math.min(0.10, at.mastery * 0.02));
+      if (move.kind === "sure") spread *= 0.35;            // 必中は振れも小さい
       dmg *= (1 - spread) + rnd() * 2 * spread;
 
-      let crit = clamp(0.025 + at.luk * 0.0050 + myAura.critAdd + (move.kind === "crit" ? 0.09 : 0) + (at.desperate ? 0.03 : 0), 0, 0.5);
+      let crit = clamp(0.025 + at.luk * 0.0050 + myAura.critAdd +
+        (move.kind === "crit" ? num(move.critAdd, 0.09) : 0) + (at.desperate ? 0.03 : 0), 0, 0.5);
       if (at.trait === "luck") crit *= 1.9;
       if (df.trait === "serene") crit *= 0.45;
-      const isCrit = rnd() < crit;
+      const isCrit = move.kind === "sure" ? false : rnd() < crit;
       if (isCrit) { dmg *= (1.65 + at.luk / 100 * 1.0); at.crits++; }
+
+      // 盾（shield）は被ダメを減らす
+      if (df.shieldT > 0) dmg *= (1 - df.shieldCut);
 
       dmg = Math.max(1, Math.round(dmg));
       df.hp -= dmg; at.dealt += dmg; at.hits++;
-      if (move.kind === "drain") { const heal = Math.round(dmg * 0.35); at.hp = Math.min(at.maxHp, at.hp + heal); }
+      if (move.kind === "drain") { const h = Math.round(dmg * num(move.drain, 0.35)); at.hp = Math.min(at.maxHp, at.hp + h); }
+      // 反射（reflect）は受けた側が張っていたぶんを返す。1 回で消える
+      if (df.reflect > 0) {
+        const back = Math.max(1, Math.round(dmg * df.reflect));
+        at.hp -= back; df.reflect = 0;
+        at.reflectedBy = back;
+      }
       if (df.hp <= 0 && df.trait === "endure" && !df.endured) { df.endured = true; df.hp = 1; }
-      return { dodge: false, dmg: dmg, crit: isCrit, aff: aff, move: move };
+      return { dmg: dmg, crit: isCrit, aff: aff };
+    }
+
+    /**
+     * 1 手ぶん。技の種類ごとに何が起きるかを決めて、ログの文面まで作って返す。
+     * @returns {{t:string, m:string}} ログ 1 行ぶん
+     */
+    function act(at, df, myAura, foeAura) {
+      const move = chooseMove(at, df);
+      const name = at.name + " の「" + move.name + "」";
+
+      // ── 攻撃しない技 ──
+      if (move.kind === "heal") {
+        const h = Math.max(1, Math.round(at.maxHp * num(move.rate, 0.16)));
+        at.hp = Math.min(at.maxHp, at.hp + h);
+        return { t: "buff", m: name + " +" + h + " 回復" };
+      }
+      if (move.kind === "shield") {
+        at.shieldCut = clamp(num(move.cut, 0.12), 0, 0.5);
+        at.shieldT = Math.max(1, Math.round(num(move.turns, 2)));
+        return { t: "buff", m: name + " 守りを固めた（被ダメ −" + Math.round(at.shieldCut * 100) + "%・" + at.shieldT + "ターン）" };
+      }
+      if (move.kind === "regen") {
+        at.regenRate = clamp(num(move.rate, 0.05), 0, 0.15);
+        return { t: "buff", m: name + " 毎ターン回復するようになった" };
+      }
+      if (move.kind === "reflect") {
+        at.reflect = clamp(num(move.ratio, 0.30), 0, 0.8);
+        return { t: "buff", m: name + " 次の一撃を " + Math.round(at.reflect * 100) + "% 返す構え" };
+      }
+      if (move.kind === "dot") {
+        df.dots.push({ rate: clamp(num(move.rate, 0.05), 0, 0.12), turns: Math.max(1, Math.round(num(move.turns, 3))) });
+        return { t: "dot", m: name + " " + df.name + " がじわじわ効いてきた" };
+      }
+      if (move.kind === "debuff") {
+        const raw = String(move.stat || "DEF").toUpperCase();
+        const stat = raw === "ATK" ? "atk" : raw === "SPD" ? "spd" : "def";
+        const label = stat === "atk" ? "攻" : stat === "spd" ? "速" : "守";
+        df.debuffs.push({ stat: stat, cut: clamp(num(move.cut, 0.18), 0, 0.5), turns: Math.max(1, Math.round(num(move.turns, 2))) });
+        return { t: "buff", m: name + " " + df.name + " の" + label + "が下がった" };
+      }
+      if (move.kind === "delay") {
+        at.delayed.push({
+          pow: num(move.pow, 2.4), turns: Math.max(1, Math.round(num(move.turns, 1))),
+          elem: move.elem, name: move.name
+        });
+        return { t: "note", m: name + " 力を溜めている" };
+      }
+      if (move.kind === "swap") {
+        const a = df.atk; df.atk = df.def; df.def = a;
+        return { t: "buff", m: name + " " + df.name + " の攻と守が入れ替わった" };
+      }
+      if (move.kind === "counter") {
+        at.guard = true;
+        return { t: "note", m: name + " 構えて相手の出方を待つ" };
+      }
+
+      // ── 攻撃する技 ──
+      // 回避。必中（sure）は絶対に外さない。守り（counter）の相手には当たりにくい
+      if (move.kind !== "sure") {
+        let ev = 0.035 + (eff(df, "spd") - eff(at, "spd")) * 0.0050 - at.tec * 0.0018;
+        if (df.trait === "serene") ev += 0.05;
+        if (df.trait === "swift") ev += 0.03;
+        if (df.guard) ev += 0.35;
+        ev = clamp(ev, 0.01, 0.75);
+        if (rnd() < ev) {
+          df.dodges++;
+          if (df.guard) {
+            // counter: かわせたら反撃
+            df.guard = false;
+            const cm = { elem: df.elem, element: ELEMENTS[df.elem], kind: "strike", name: "反撃", pow: 1.0 };
+            const r = strike(df, at, cm, foeAura, myAura);
+            return { t: "crit", m: df.name + " がかわして反撃 → " + r.dmg };
+          }
+          return { t: "miss", m: df.name + " が回避" };
+        }
+      }
+      df.guard = false;
+
+      // multi（連撃）は回数が乱数。gamble は威力そのものが乱数
+      let times = 1, powMul = 1;
+      if (move.kind === "multi") {
+        const lo = Math.max(1, Math.round(num(move.min, 2))), hi = Math.max(lo, Math.round(num(move.max, 3)));
+        times = lo + Math.floor(rnd() * (hi - lo + 1));
+      } else if (move.kind === "gamble") {
+        powMul = rnd() * num(move.maxMult, 2.4);
+      }
+
+      let total = 0, crit = false, aff = 1, reflected = 0;
+      at.reflectedBy = 0;
+      for (let i = 0; i < times && df.hp > 0; i++) {
+        const r = strike(at, df, move, myAura, foeAura, powMul);
+        total += r.dmg; crit = crit || r.crit; aff = r.aff;
+      }
+      reflected = at.reflectedBy || 0;
+
+      // stack（使うたび攻が積み上がる）
+      if (move.kind === "stack") {
+        const cap = Math.max(1, Math.round(num(move.cap, 4)));
+        if (at.stackUses == null) at.stackUses = 0;
+        if (at.stackUses < cap) { at.stack += num(move.add, 6); at.stackUses++; }
+      }
+      // first（次のターン必ず先手）
+      if (move.kind === "first") at.goFirst = true;
+
+      const tag =
+        (crit ? " 会心" : "") +
+        (aff >= 1.08 ? " 有利" : (aff <= 0.92 ? " 不利" : "")) +
+        (move.kind === "drain" ? " 吸収" : "") +
+        (move.kind === "sure" ? " 必中" : "") +
+        (times > 1 ? " " + times + " 連撃" : "") +
+        (move.kind === "gamble" ? (powMul >= 1.6 ? " 大当たり" : powMul <= 0.4 ? " 空振り気味" : "") : "") +
+        (move.kind === "stack" ? " 積み上げ" : "") +
+        (move.kind === "first" ? " 次は先手" : "") +
+        (reflected ? " ／ " + Math.round(reflected) + " 反射された" : "");
+
+      return {
+        t: move.kind === "finisher" ? "finisher" : (crit ? "crit" : "hit"),
+        m: name + (move.kind === "finisher" ? "！！" : "") + " → " + total + tag
+      };
     }
 
     let round = 0;
@@ -929,9 +1136,11 @@ const CB = (function () {
     while (round < MAXR && iA < 3 && iB < 3) {
       round++;
       const A = LA[iA], B = LB[iB];
-      let sa = A.spd + (A.trait === "swift" ? A.spd * 0.16 : 0) + (round === 1 ? auA.firstStrike * 25 : 0);
-      let sb = B.spd + (B.trait === "swift" ? B.spd * 0.16 : 0) + (round === 1 ? auB.firstStrike * 25 : 0);
+      // first（次のターン必ず先手）は素の速さより優先する
+      let sa = eff(A, "spd") + (A.trait === "swift" ? A.spd * 0.16 : 0) + (round === 1 ? auA.firstStrike * 25 : 0) + (A.goFirst ? 9999 : 0);
+      let sb = eff(B, "spd") + (B.trait === "swift" ? B.spd * 0.16 : 0) + (round === 1 ? auB.firstStrike * 25 : 0) + (B.goFirst ? 9999 : 0);
       const first = (sa > sb) ? "A" : (sb > sa) ? "B" : (foldA >= foldB ? "A" : "B");
+      A.goFirst = false; B.goFirst = false;
       const seq = first === "A" ? ["A", "B"] : ["B", "A"];
 
       for (let q = 0; q < 2; q++) {
@@ -944,15 +1153,13 @@ const CB = (function () {
         let times = 1;
         if (at.trait === "twin" && rnd() < 0.22) { times = 2; at.extra++; }
         for (let t = 0; t < times && df.hp > 0 && at.hp > 0; t++) {
-          const r = hit(at, df, myAura, foeAura);
-          if (r.dodge) push({ t: "miss", s: atkSide, r: round, m: df.name + " が回避" });
-          else push({
-            t: r.move.kind === "finisher" ? "finisher" : (r.crit ? "crit" : "hit"), s: atkSide, r: round,
-            m: at.name + " の「" + r.move.name + "」" + (r.move.kind === "finisher" ? "！！" : "") +
-              " → " + r.dmg + (r.crit ? " 会心" : "") +
-              (r.aff >= 1.08 ? " 有利" : (r.aff <= 0.92 ? " 不利" : "")) +
-              (r.move.kind === "drain" ? " 吸収" : "") + (t > 0 ? " 連撃" : "")
-          });
+          const r = act(at, df, myAura, foeAura);
+          push({ t: r.t, s: atkSide, r: round, m: r.m + (t > 0 ? "（連撃）" : "") });
+        }
+        // 反射で攻め手が倒れることがある
+        if (at.hp <= 0) {
+          push({ t: "buff", s: atkSide, r: round, m: at.name + " 倒れる" });
+          if (atkSide === "A") iA++; else iB++;
         }
         if (df.hp <= 0) {
           const dfSide = atkSide === "A" ? "B" : "A";
@@ -961,24 +1168,65 @@ const CB = (function () {
         }
       }
 
-      // ターン終わりの隊オーラ（呪詛/蝕毒/再生）。処理順は fold で固定＝A/B を入れ替えても同じ。
+      // ターン終わりの処理。順序は fold で固定＝A/B を入れ替えても同じ結果になる。
+      //   隊オーラ（呪詛/蝕毒/再生）＋ 技の継続効果（毒・盾・弱体・溜め・自己回復）
       (foldA >= foldB ? ["A", "B"] : ["B", "A"]).forEach(function (side) {
         const isA = side === "A";
         const au = isA ? auA : auB;
         const meF = isA ? LA[iA] : LB[iB];
         const foeF = isA ? LB[iB] : LA[iA];
-        if (meF && meF.hp > 0 && au.regen > 0 && meF.hp < meF.maxHp) {
-          const h = Math.round(meF.maxHp * Math.min(0.04, au.regen));
-          meF.hp = Math.min(meF.maxHp, meF.hp + h);
-          push({ t: "buff", s: side, r: round, m: meF.name + " +" + h + " 回復" });
+        const fell = function (f) {   // 倒れた側の繰り上がり
+          if (f === (isA ? LA[iA] : LB[iB])) { if (isA) iA++; else iB++; }
+          else { if (isA) iB++; else iA++; }
+        };
+
+        if (meF && meF.hp > 0) {
+          // 隊オーラの再生
+          if (au.regen > 0 && meF.hp < meF.maxHp) {
+            const h = Math.round(meF.maxHp * Math.min(0.04, au.regen));
+            meF.hp = Math.min(meF.maxHp, meF.hp + h);
+            push({ t: "buff", s: side, r: round, m: meF.name + " +" + h + " 回復" });
+          }
+          // regen（自分で張った毎ターン回復）
+          if (meF.regenRate > 0 && meF.hp < meF.maxHp) {
+            const h = Math.max(1, Math.round(meF.maxHp * meF.regenRate));
+            meF.hp = Math.min(meF.maxHp, meF.hp + h);
+            push({ t: "buff", s: side, r: round, m: meF.name + " +" + h + " 回復（継続）" });
+          }
+          // dot（毎ターン最大 HP の N%）
+          for (let i = meF.dots.length - 1; i >= 0; i--) {
+            const d = meF.dots[i];
+            const x = Math.max(1, Math.round(meF.maxHp * d.rate));
+            meF.hp -= x;
+            push({ t: "dot", s: isA ? "B" : "A", r: round, m: meF.name + " 継続ダメージ -" + x });
+            if (--d.turns <= 0) meF.dots.splice(i, 1);
+          }
+          // 盾と弱体の残りターン
+          if (meF.shieldT > 0 && --meF.shieldT <= 0) meF.shieldCut = 0;
+          for (let i = meF.debuffs.length - 1; i >= 0; i--) if (--meF.debuffs[i].turns <= 0) meF.debuffs.splice(i, 1);
+          // delay（溜めた一撃。発動前に倒れると不発）
+          for (let i = meF.delayed.length - 1; i >= 0; i--) {
+            const d = meF.delayed[i];
+            if (--d.turns > 0) continue;
+            meF.delayed.splice(i, 1);
+            const target = isA ? LB[iB] : LA[iA];
+            if (target && target.hp > 0 && meF.hp > 0) {
+              const dm = { elem: d.elem, element: ELEMENTS[d.elem], kind: "strike", name: d.name, pow: d.pow };
+              const r = strike(meF, target, dm, au, isA ? auB : auA);
+              push({ t: "finisher", s: side, r: round, m: meF.name + " の溜めていた「" + d.name + "」が炸裂 → " + r.dmg });
+              if (target.hp <= 0) { push({ t: "buff", s: isA ? "B" : "A", r: round, m: target.name + " 倒れる" }); if (isA) iB++; else iA++; }
+            }
+          }
+          if (meF.hp <= 0) { push({ t: "buff", s: side, r: round, m: meF.name + " 倒れる" }); if (isA) iA++; else iB++; }
         }
+
         if (foeF && foeF.hp > 0) {
           if (au.curseTick > 0) foeF.defDrop = Math.min(0.4, foeF.defDrop + au.curseTick);
           if (au.venomTick > 0) {
             const d = Math.max(1, Math.round(foeF.maxHp * Math.min(0.022, au.venomTick)));
             foeF.hp -= d;
             push({ t: "dot", s: side, r: round, m: foeF.name + " 蝕毒 -" + d });
-            if (foeF.hp <= 0) { if (isA) iB++; else iA++; }
+            if (foeF.hp <= 0) { push({ t: "buff", s: isA ? "B" : "A", r: round, m: foeF.name + " 倒れる" }); if (isA) iB++; else iA++; }
           }
         }
       });

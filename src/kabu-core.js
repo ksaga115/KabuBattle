@@ -235,29 +235,31 @@ const KB = (function () {
   // strike / crit / pierce / drain / finisher の 5 種だけ。そこで moves.json には設計どおりの
   // 豊かな kind を書いておき、ここで「今のエンジンで一番近い挙動」に落とす。
   // CB 側に kind を足したらこの表から順に外していけばよい（moves.json は書き換えなくて済む）。
-  const ENGINE_KINDS = { strike: 1, crit: 1, pierce: 1, drain: 1, finisher: 1 };
-  const KIND_FALLBACK = {
-    multi: "strike",    // 連撃 → 素直な一撃（回数は未実装）
-    sure: "strike",     // 必中
-    first: "strike",    // 次ターン先手
-    stack: "strike",    // 使うたび攻 +N
-    gamble: "crit",     // 威力 0〜N 倍 → 会心寄り
-    delay: "finisher",  // 溜めて大ダメージ → 瀕死時の大技
-    shield: "strike",   // 被ダメ −N%
-    reflect: "strike",  // 反射
-    swap: "pierce",     // 攻守入れ替え → 守り無視で近似
-    dot: "drain",       // 継続ダメージ → 吸収で近似
-    debuff: "pierce",   // 守/速/攻 −N% → 守り無視で近似
-    heal: "drain",      // 回復
-    counter: "strike"   // 回避専念して反撃
+  // エンジン（src/engine.js）が実際に効かせる種類。設計書 §6.2 の語彙をすべて実装してある。
+  // もとの CB は 5 種しか効かせず、残りは近いものに丸めていた（技名だけ違って中身が同じ）。
+  // エンジンを株バトルに取り込んだ（§17）ので、丸め込みはやめた。
+  const ENGINE_KINDS = {
+    strike: 1, crit: 1, pierce: 1, drain: 1, finisher: 1,
+    multi: 1, sure: 1, first: 1, stack: 1, gamble: 1,
+    delay: 1, shield: 1, reflect: 1, swap: 1, dot: 1, debuff: 1, heal: 1, counter: 1, regen: 1
   };
+  // 実際に相手を殴る種類。ここに無い種類は補助技（盾・回復・毒・弱体・溜めなど）
+  const DAMAGING_KINDS = {
+    strike: 1, crit: 1, pierce: 1, drain: 1, multi: 1, sure: 1,
+    first: 1, stack: 1, gamble: 1, counter: 1, finisher: 1
+  };
+  // 万一 moves.json に未知の kind が書かれたときの逃げ場（黙って落とさない）
+  const KIND_FALLBACK = { unknown: "strike" };
 
-  /** moves.json の kind を、今のエンジンが実際に効かせる kind に落とす */
+  /** moves.json の kind を、エンジンが効かせる kind に通す */
   function engineKind(kind) {
     const k = String(kind || "strike");
-    if (ENGINE_KINDS[k]) return k;
-    return KIND_FALLBACK[k] || "strike";
+    return ENGINE_KINDS[k] ? k : "strike";
   }
+
+  // エンジンへ渡す数値。設計書 §6.2 のパラメータをそのまま通す
+  const MOVE_PARAMS = ["pow", "min", "max", "add", "cap", "maxMult", "turns",
+    "cut", "ratio", "rate", "mult", "critAdd", "pierce", "drain"];
 
   /**
    * 技の属性。moves.json が elem を持っていればそれ、無ければコードから決定論的に散らす。
@@ -301,11 +303,20 @@ const KB = (function () {
     // 有利・不利の差 33 ポイント）。BarcodeTool 側も v3 で「カバー技を持たせると属性差が
     // 45 → 15 ポイントに縮む」と記録している。moveElem が本数ごとに別の属性を割り当てるので、
     // 同じ業種技を足すだけでカバー範囲が広がる。
-    if (!own.length && sectorMove) {
-      out.push(toMove(sectorMove, ownElem, code, 1));
-      out.push(toMove(sectorMove, ownElem, code, 2));
-    } else if (own.length === 1 && sectorMove) {
-      out.push(toMove(sectorMove, ownElem, code, 2));
+    // 埋め合わせは **打撃**にする。業種技には盾・回復・毒のように攻撃しないものがあり
+    // （33 業種のうち 11 業種）、そのまま写すと「攻撃手段を 1 つも持たない銘柄」ができてしまう。
+    // 打撃なら必ず殴れるし、属性のカバーにもなる（moveElem が本数ごとに別の属性を割り当てる）。
+    const filler = (i) => {
+      const m = toMove({ name: sectorMove.name, kind: "strike", pow: 0.95, text: sectorMove.text }, ownElem, code, i);
+      m.designKind = sectorMove.kind;
+      return m;
+    };
+    if (!own.length && sectorMove) { out.push(filler(1)); out.push(filler(2)); }
+    else if (own.length === 1 && sectorMove) out.push(filler(2));
+
+    // どの銘柄も攻撃手段を 1 つは持つ（固有技が 2 本とも補助技でも殴れるように）
+    if (!out.some((m) => DAMAGING_KINDS[m.kind])) {
+      out.push(toMove({ name: sectorMove ? sectorMove.name : "一撃", kind: "strike", pow: 0.95 }, ownElem, code, out.length));
     }
 
     const ult = entry.ultimate;
@@ -318,14 +329,26 @@ const KB = (function () {
   function toMove(spec, ownElem, code, i, isUlt) {
     const elem = moveElem(spec, ownElem, code, i);
     const designKind = String(spec.kind || "strike");
-    // 必殺技は「瀕死のときだけ出る大技」としてエンジンに見せたい枠なので finisher に寄せる
-    const kind = isUlt ? (ENGINE_KINDS[designKind] === 1 && designKind !== "strike" ? designKind : "finisher") : engineKind(designKind);
-    return {
+    const kind = engineKind(designKind);
+    const m = {
       elem: elem, element: elementOf(elem), kind: kind,
       name: String(spec.name || "一撃"),
       text: String(spec.text || ""), origin: String(spec.origin || ""),
       designKind: designKind, ultimate: !!isUlt
     };
+    // 数値はそのままエンジンへ渡す（威力・回数・ターン数など）
+    for (const k of MOVE_PARAMS) if (spec[k] != null && isFinite(Number(spec[k]))) m[k] = Number(spec[k]);
+    if (spec.stat != null) m.stat = String(spec.stat);
+    // 必殺技は「瀕死のときだけ出る大技」。エンジンは finisher をその枠として扱うので、
+    // もともと finisher でない必殺技も、解放された日は瀕死時の切り札として見せる。
+    // ただし元の種類の効果（溜め・連撃など）は残したいので、威力だけ上乗せして finisher にする。
+    if (isUlt && kind !== "finisher") {
+      m.kind = "finisher";
+      m.mult = Number(spec.mult) || 1.6;
+      m.pow = Number(spec.pow) || 1.6;
+      m.designKind = designKind;
+    }
+    return m;
   }
 
   /** 必殺技の解放（設計書 §6.4）。unlock のどれか 1 つでも当日成立していれば解放 */
@@ -876,7 +899,8 @@ const KB = (function () {
     lognorm: lognorm, S: S, baseStats: baseStats, bodyHp: bodyHp, provisionalStats: provisionalStats,
     rarityOf: rarityOf, traitsOf: traitsOf, TRAIT_RULES: TRAIT_RULES, FALLBACK_BY_STAT: FALLBACK_BY_STAT,
     // 技
-    engineKind: engineKind, KIND_FALLBACK: KIND_FALLBACK, movesFor: movesFor, isUnlocked: isUnlocked,
+    engineKind: engineKind, KIND_FALLBACK: KIND_FALLBACK, ENGINE_KINDS: ENGINE_KINDS,
+    DAMAGING_KINDS: DAMAGING_KINDS, movesFor: movesFor, isUnlocked: isUnlocked,
     // 決算発表日（推定）
     estimatedEarningsDate: estimatedEarningsDate, isEarningsDay: isEarningsDay,
     EARNINGS_FROM: EARNINGS_FROM, EARNINGS_TO: EARNINGS_TO, quarterEndBefore: quarterEndBefore,

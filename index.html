@@ -125,6 +125,38 @@ details>summary{cursor:pointer;color:var(--dim);font-size:12px}
 <dialog id="dlg"><div class="dlg-body" id="dlg-body"></div></dialog>
 
 <script>
+// src/engine.js
+// 対戦エンジン（コードバトルの CB）。**株バトルの一部として持っている**。
+//
+// 出どころ: ksaga115/BarcodeTool の BarcodeTool.html
+//   コミット 79da6202d2c11b2ce808b011795a066df15b5c62
+//   sha256   5403bb1fce0da07f1dc1977f76b7df91ae905b61cfe4a3db4b457db0dbf9566c
+//   取り込み 2026-09-28
+//
+// もともとは「ビルドのたびに BarcodeTool の固定コミットから抜き出す」形にしていた（設計書 §0.1）。
+// やめた理由は 3 つ:
+//   ・別リポジトリなので、エンジンを直したいときに向こうへ push できないと前に進めない
+//   ・ビルドのたびに通信が要る（Actions でも、手元でも）
+//   ・株バトルに要る改修（体力の追加枠、設計書 §6.2 の技の種類）を入れられない
+// 借り物ではなく自分のものにして、株バトルの都合で直せるようにした。
+//
+// ── 株バトルのために変えたところ（ここに全部書く。増えたら必ず足すこと）──
+//
+// 1. mkFighter の maxHp に `+ (beast.hpAdd || 0)` を足した
+//    株バトルは決算から攻守速技運を、時価総額から体力を作る。CB は maxHp を守・速・TOTAL から
+//    しか決めないので、時価総額のぶんを渡す口が無かった。結果、40 兆円の会社も 200 億円の会社も
+//    同じ体力で戦っていた（実測: 予算 160 万の隊が予算 30 万の隊に 64.5% → 体力を効かせると 90.0%）。
+//    コードバトルの個体は hpAdd を持たないので、向こうでは常に +0（＝挙動は完全に同じ）。
+//    取り込み時に、個体 460 体・1v1 690 試合・スカッド 304 試合が 1 ビットも変わらないことを
+//    確認済み。BarcodeTool 側の npm run domcheck（89/0）と npm run sim（84 PASS / 0 FAIL）も通る。
+//
+// ── 触るときの約束 ──
+//
+// `build()`（個体の生成）に手を入れると、同じ銘柄が別の個体になる。株バトルの個体は
+// buildFromStock（src/kabu-core.js）が作るので build() は実は使っていないが、
+// affinity / TRAITS / ELEMENTS / STAT_KEYS の並びを変えると素体の意味が変わる。
+// 数式を触ったら必ず scripts/kabu/sim.mjs を回して、決定論・A/B 対称・停止性・勝率曲線を確かめること。
+
 const CB = (function () {
 
   // ── 文字列 → UTF-8 バイト列 ──
@@ -636,7 +668,7 @@ const CB = (function () {
       trait: beast.trait.key, elem: beast.elem, moves: beast.moves || [],
       mastery: Math.max(0, Math.min(5, (mastery | 0))),
       // DEF が主だが SPD も少し体力に効く。total 依存は弱め（強個体が過度にタンクにならないよう）
-      maxHp: Math.round(250 + st.DEF * 2.7 + st.SPD * 0.9 + beast.total * 0.7),
+      maxHp: Math.round(250 + st.DEF * 2.7 + st.SPD * 0.9 + beast.total * 0.7) + (beast.hpAdd || 0),
       hp: 0, defDrop: 0, endured: false, desperate: false,
       crits: 0, hits: 0, dodges: 0, extra: 0, dealt: 0, favHits: 0, finisherHits: 0
     };
@@ -1127,6 +1159,7 @@ const CB = (function () {
     STAT_KEYS: STAT_KEYS, rankOf: rankOf, affinity: affinity
   };
 })();
+
 </script>
 <script>
 // src/kabu-core.js
@@ -1776,14 +1809,29 @@ const KB = (function () {
     return { up: take(up), down: take(down), hot: take(hot) };
   }
 
-  /** 相手の強さを自パーティに合わせて素体を ±10% でスケール（設計書 §7.4 の梯子方式） */
-  function scaleToParty(beast, myAvgRare, theirRare) {
+  /**
+   * 相手の強さを自パーティに合わせてスケール（設計書 §7.4 の梯子方式）。
+   *
+   * 素体を ±10% するだけでは足りない。日替わりの相手は「その日の主役」＝中小型株が多く、
+   * 時価総額から来る体力（hpAdd）が小さい。こちらが大型株をそろえると体力だけ一方的に
+   * 開いて、勝率が 87% まで行ってしまった（実測）。体力も梯子に乗せる。
+   *
+   * ただし相手の体力を丸ごとこちらに置き換えると「大きい会社は打たれ強い」が消えるので、
+   * 相手自身の体力とこちらの平均の中間を取る。相手の素性は残しつつ、歯応えは保つ。
+   *
+   * @param {number} myAvgHpAdd 自パーティの hpAdd の平均。省略すると体力は触らない
+   */
+  function scaleToParty(beast, myAvgRare, theirRare, myAvgHpAdd) {
     const d = clamp((num(myAvgRare) - num(theirRare)) * 0.5, -0.10, 0.10);
     const stats = {};
     for (const k of CB.STAT_KEYS) stats[k] = clamp(Math.round(beast.stats[k] * (1 + d)), 1, 130);
     let sum = 0; for (const k of CB.STAT_KEYS) sum += stats[k];
     const total = Math.round(sum / 5);
-    return Object.assign({}, beast, { stats: stats, sum: sum, total: total, rank: CB.rankOf(total) });
+    const out = { stats: stats, sum: sum, total: total, rank: CB.rankOf(total) };
+    if (myAvgHpAdd != null) {
+      out.hpAdd = Math.round((num(beast.hpAdd) + num(myAvgHpAdd)) / 2 * (1 + d));
+    }
+    return Object.assign({}, beast, out);
   }
 
   // ══════════════ 株式分割・併合の検出（設計書 §8.3）══════════════
@@ -3366,8 +3414,9 @@ function settleOneDay(day, notes) {
   var foeCodes = [p.up, p.hot, p.down].filter(Boolean);
   while (foeCodes.length < 3) foeCodes.push(foeCodes[0]);
   var myRare = mine.reduce(function (s, b) { return s + b.kabu.rare; }, 0) / mine.length;
+  var myHpAdd = mine.reduce(function (s, b) { return s + num(b.hpAdd); }, 0) / mine.length;
   var foes = buildParty(foeCodes.slice(0, 3), day, {}).map(function (b) {
-    return KB.scaleToParty(b, myRare, b.kabu.rare);
+    return KB.scaleToParty(b, myRare, b.kabu.rare, myHpAdd);
   });
 
   // 練度（設計書 §15）。長く持っているほどダメージの振れが縮む＝時間分散。

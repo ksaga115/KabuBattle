@@ -14,7 +14,7 @@
 //   node scripts/kabu/build-universe.mjs --xlsx <p> … ローカルの data_j.xlsx を使う（通信しない）
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { ROOT } from "./vendor-cb.mjs";
+import { ROOT } from "./paths.mjs";
 import { loadCore } from "./load.mjs";
 import { readXlsx } from "./xlsx.mjs";
 

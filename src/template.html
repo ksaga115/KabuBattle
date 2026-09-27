@@ -1484,8 +1484,9 @@ function settleOneDay(day, notes) {
   var foeCodes = [p.up, p.hot, p.down].filter(Boolean);
   while (foeCodes.length < 3) foeCodes.push(foeCodes[0]);
   var myRare = mine.reduce(function (s, b) { return s + b.kabu.rare; }, 0) / mine.length;
+  var myHpAdd = mine.reduce(function (s, b) { return s + num(b.hpAdd); }, 0) / mine.length;
   var foes = buildParty(foeCodes.slice(0, 3), day, {}).map(function (b) {
-    return KB.scaleToParty(b, myRare, b.kabu.rare);
+    return KB.scaleToParty(b, myRare, b.kabu.rare, myHpAdd);
   });
 
   // 練度（設計書 §15）。長く持っているほどダメージの振れが縮む＝時間分散。

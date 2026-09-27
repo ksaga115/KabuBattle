@@ -23,11 +23,6 @@ jobs:
         with:
           node-version: "22"
 
-      - uses: actions/cache@v4
-        with:
-          path: vendor/cache
-          key: vendor-cb-${{ hashFiles('vendor/BarcodeTool.commit') }}
-
       - name: 検証（データの形と不変条件）
         run: node scripts/kabu/validate.mjs
 

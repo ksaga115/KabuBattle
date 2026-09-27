@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadCore } from "./load.mjs";
-import { ROOT } from "./vendor-cb.mjs";
+import { ROOT } from "./paths.mjs";
 import { synth, synthMoves, synthSplits, rng } from "./fixtures.mjs";
 
 let pass = 0, warn = 0, fail = 0;
@@ -22,8 +22,8 @@ const soft = (cond, msg, detail) => {
 };
 const section = (t) => console.log(`\n── ${t} ──`);
 
-const { CB, KB, pin } = await loadCore();
-console.log(`株バトル シム  — エンジン ${pin.repo}@${pin.commit.slice(0, 8)}`);
+const { CB, KB } = await loadCore();
+console.log(`株バトル シム  — エンジンは src/engine.js（株バトルに同梱）`);
 
 const SECTORS = KB.sectors();
 const { universe, fin, latest } = synth(120, SECTORS, 20260926);

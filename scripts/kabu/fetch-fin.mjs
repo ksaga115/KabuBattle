@@ -17,7 +17,7 @@
 //   node scripts/kabu/fetch-fin.mjs --dry       … 書き込まない
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
-import { ROOT } from "./vendor-cb.mjs";
+import { ROOT } from "./paths.mjs";
 import * as finSource from "./sources/yahoo-fin.mjs";
 import * as priceSource from "./sources/yahoo.mjs";
 

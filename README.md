@@ -1,13 +1,14 @@
 # 株バトル（KabuBattle）
 
-日本株の **決算 → 素体**、**株価の動き → 日々の状態**、**事業・技術 → 技** でキャラクターを組み立て、
-[BarcodeTool](https://github.com/ksaga115/BarcodeTool) の「コードバトル」エンジンで戦わせるゲーム。
+日本株の **決算 → 素体**、**株価の動き → 日々の状態**、**事業・技術 → 技**、**値動きのクセ → 気質** で
+キャラクターを組み立て、コードバトルのエンジンで戦わせるゲーム。
 契約金は株価、手放すと時価で戻る。毎朝の予想がバフになり、夕方に「その日の相場そのもの」が敵として現れる。
 
-- 設計書: [`docs/設計書.md`](./docs/設計書.md)（データの流れ・ID・保存形式・移行手順。§14 に実装で変えた点）
+- 設計書: [`docs/設計書.md`](./docs/設計書.md)（データの流れ・ID・保存形式・移行手順。§14 以降に実装で変えた点）
 - 公開 URL（予定）: https://ksaga115.github.io/KabuBattle/
 - 状態: **遊べます**。東証に上場している内国株式すべて（3,700 銘柄）・実データ入り。
-  M1〜M2、予想・シーズン・称号（M5）、上場廃止・分割・年次アーカイブ（§8）まで実装済み。
+  M1〜M2、予想・シーズン・称号（M5）、上場廃止・分割・年次アーカイブ（§8）、
+  気質・ポートフォリオ・練度（§15）、今日のお題・日経との比較（§16）まで実装済み。
   未着手は決算日ボス（§9.3）とキャラ画像の生成（M4。いまは手続き生成の SVG）。
 
 ## 遊びかた（手元で）
@@ -28,7 +29,7 @@ node scripts/serve.mjs      # → http://127.0.0.1:8787/
 | `index.html` | ゲーム本体（単一 HTML。ビルド生成物なので直接編集しない） |
 | `src/template.html` | 画面と進行。`index.html` のもと |
 | `src/kabu-core.js` | 中核。決算・株価・事業 → 対戦エンジンが食える個体に翻訳する（`KB`） |
-| `vendor/BarcodeTool.commit` | 対戦エンジンの流用元コミットと sha256 |
+| `src/engine.js` | 対戦エンジン（同梱。出どころと変更点はファイル冒頭） |
 | `kabu/universe.json` | 銘柄マスタ（コード・社名・33 業種・属性・市場/規模区分・上場状態。1 銘柄 1 行） |
 | `kabu/moves.json` | 技データ（33 業種の業種技＋主要銘柄の固有技 2 つと必殺技。`origin` に元ネタの一言） |
 | `kabu/data/latest.json` | 今日の状態スナップショット（ゲームはこれだけ読めば動く。素体も焼き込む） |
@@ -43,7 +44,6 @@ node scripts/serve.mjs      # → http://127.0.0.1:8787/
 ```
 node scripts/build-kabu.mjs           # index.html を組み立てる（ソースを直したら必ず）
 node scripts/build-kabu.mjs --check   #   焼き直し忘れがないか見るだけ
-node scripts/build-kabu.mjs --update  #   流用元エンジンの最新コミットと sha256 を表示
 node scripts/kabu/build-universe.mjs  # JPX から銘柄マスタを更新（内国株式すべて）
 node scripts/kabu/build-universe.mjs --large-only   # 大型 99 銘柄に絞る（動作確認用）
 node scripts/kabu/fetch-prices.mjs    # 日足 → latest.json（平日 16:30 JST に Actions が回す）
@@ -64,10 +64,12 @@ node scripts/serve.mjs                # 手元で遊ぶための簡易サーバ�
 
 ## 対戦エンジン
 
-エンジン（`CB`）は BarcodeTool 側が原本で、こちらは触りません。`vendor/BarcodeTool.commit` に
-固定したコミットから `BarcodeTool.html` を取得し、sha256 で照合してから `CB` の定義だけを抜き出して
-`index.html` に埋め込みます。更新するときは `--update` が出す commit と sha256 を手で書き換え、
-`sim.mjs` で決定論・対称性・勝率曲線が崩れていないことを確かめてから進めます。
+エンジン（コードバトルの `CB`）は **株バトルに同梱**しています（`src/engine.js`）。もとは
+[BarcodeTool](https://github.com/ksaga115/BarcodeTool) のもので、出どころ（コミット・sha256）と
+株バトルのために変えたところはファイル冒頭に全部書いてあります。ビルドに通信は要りません。
+
+エンジンの数式を触ったら、必ず `node scripts/kabu/sim.mjs` を回して決定論・A/B 対称・停止性・
+勝率曲線が崩れていないことを確かめてください。
 
 ## 注意
 

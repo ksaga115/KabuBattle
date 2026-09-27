@@ -28,11 +28,6 @@ jobs:
         with:
           node-version: "22"
 
-      - uses: actions/cache@v4
-        with:
-          path: vendor/cache
-          key: vendor-cb-${{ hashFiles('vendor/BarcodeTool.commit') }}
-
       # JPX の月次一覧から社名・33 業種・上場状態を取り込む。
       # 日経 225 の構成銘柄ページに届けば indices に nk225 が入る（届かなければ据え置き）。
       - name: 銘柄マスタを更新

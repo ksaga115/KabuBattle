@@ -20,7 +20,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { resolve } from "node:path";
-import { ROOT } from "./vendor-cb.mjs";
+import { ROOT } from "./paths.mjs";
 import { buildIndex, writeIndex } from "./fetch-prices.mjs";
 
 const DATA = resolve(ROOT, "kabu", "data");

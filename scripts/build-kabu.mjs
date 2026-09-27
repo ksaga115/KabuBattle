@@ -1,53 +1,38 @@
 // scripts/build-kabu.mjs
-// index.html（ゲーム本体）を組み立てる。設計書 §0.1・§10。
+// index.html（ゲーム本体）を組み立てる。
 //
-//   src/template.html   … 画面と進行（株バトル固有の部分）
-//   BarcodeTool.html    … 対戦エンジン CB を、vendor/BarcodeTool.commit で固定したコミットから借りる
-//   src/kabu-core.js    … 決算・株価・事業 → CB が食える個体、に翻訳する中核
+//   src/engine.js      … 対戦エンジン（コードバトルの CB。出どころと変更点はファイル冒頭）
+//   src/kabu-core.js   … 決算・株価・事業 → エンジンが食える個体に翻訳する中核
+//   src/template.html  … 画面と進行
 //
 // 3 つを合成して、リポジトリ直下に単一ファイル index.html を書き出す。
-// BarcodeTool.html には一切手を加えない（原本不変）。
+// 以前は BarcodeTool の固定コミットからエンジンを取ってきていたが、取り込んだので通信は無い。
 //
 // 使い方:
 //   node scripts/build-kabu.mjs           … index.html を書き出す
 //   node scripts/build-kabu.mjs --check   … 書かずに、既存の index.html と一致するかだけ見る
-//   node scripts/build-kabu.mjs --update  … 流用元の最新コミットと sha256 を表示する（固定値は手で進める）
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import { ROOT, fetchVendorHtml, extractCB, readPin } from "./kabu/vendor-cb.mjs";
+import { ROOT } from "./kabu/paths.mjs";
+import { readEngine, readCore, checkEngine, ENGINE_PATH, CORE_PATH } from "./kabu/load.mjs";
 
 const TEMPLATE = resolve(ROOT, "src", "template.html");
-const CORE = resolve(ROOT, "src", "kabu-core.js");
 const OUT = resolve(ROOT, "index.html");
 
 const has = (n) => process.argv.includes(n);
 
-async function showUpdate() {
-  const pin = readPin();
-  const api = `https://api.github.com/repos/${pin.repo}/commits/HEAD`;
-  const res = await fetch(api, { headers: { "User-Agent": "KabuBattle", Accept: "application/vnd.github+json" } });
-  if (!res.ok) throw new Error(`最新コミットが引けません（${res.status}）`);
-  const head = (await res.json()).sha;
-  if (head === pin.commit) { console.log(`[build] すでに最新です（${head.slice(0, 8)}）`); return; }
-  const raw = await fetch(`https://raw.githubusercontent.com/${pin.repo}/${head}/${pin.file}`);
-  if (!raw.ok) throw new Error(`${pin.file} が取れません（${raw.status}）`);
-  const buf = Buffer.from(await raw.arrayBuffer());
-  const sha = createHash("sha256").update(buf).digest("hex");
-  console.log(`[build] 流用元に新しいコミットがあります。vendor/BarcodeTool.commit を書き換えてください:`);
-  console.log(`  commit=${head}`);
-  console.log(`  sha256=${sha}`);
-  console.log(`  （書き換えたあと node scripts/build-kabu.mjs と node scripts/kabu/sim.mjs を回して、`);
-  console.log(`    決定論・A/B 対称・勝率曲線が崩れていないことを確かめること）`);
+/** エンジンの出どころ（src/engine.js の冒頭に書いてあるコミット）を拾って footer に出す */
+function engineOrigin(src) {
+  const m = src.match(/コミット\s+([0-9a-f]{40})/);
+  return m ? m[1].slice(0, 8) : "同梱";
 }
 
-export async function build() {
-  for (const p of [TEMPLATE, CORE]) {
+export function build() {
+  for (const p of [TEMPLATE, ENGINE_PATH, CORE_PATH]) {
     if (!existsSync(p)) throw new Error(`見つかりません: ${p}`);
   }
-  const { html, pin, from } = await fetchVendorHtml();
-  const cb = extractCB(html);
-  const core = readFileSync(CORE, "utf8");
+  const engine = checkEngine(readEngine());
+  const core = readCore();
   const tpl = readFileSync(TEMPLATE, "utf8");
 
   let out = tpl;
@@ -55,9 +40,9 @@ export async function build() {
     if (!out.includes(marker)) throw new Error(`テンプレートに目印がありません: ${marker}`);
     out = out.replace(marker, () => code);   // 置換文字列中の $ を特別扱いさせない
   };
-  put("/*__CB_ENGINE__*/", cb);
+  put("/*__CB_ENGINE__*/", engine);
   put("/*__KABU_CORE__*/", core);
-  put("__ENGINE_COMMIT__", pin.commit.slice(0, 8));
+  put("__ENGINE_COMMIT__", engineOrigin(engine));
   put("__BUILD_DATE__", new Date().toISOString().slice(0, 10));
 
   const left = out.replace(/__proto__/g, "").match(/__[A-Z_]+__/g);
@@ -74,26 +59,24 @@ export async function build() {
     throw new Error("外部ファイル参照が含まれています（index.html は自己完結の想定）");
   }
 
-  // 組み込んだ部品が生きているかの軽い確認（黙って壊れた HTML を出さない）
+  // 組み込んだ部品が生きているかの軽い確認
   for (const needle of ["function squadMatch(", "function buildFromStock(", "KB.protagonists", "kabu/data/latest.json"]) {
     if (!out.includes(needle)) throw new Error(`組み立て結果に ${needle} が含まれていません`);
   }
-  return { out, pin, from };
+  return out;
 }
 
-if (has("--update")) {
-  showUpdate().catch((e) => { console.error("[build] " + e.message); process.exit(1); });
+const out = build();
+if (has("--check")) {
+  const cur = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
+  // ビルド日付だけは毎日変わるので、比較から外す
+  const strip = (s) => s.replace(/ビルド \d{4}-\d{2}-\d{2}/, "ビルド ----");
+  if (strip(cur) === strip(out)) { console.log("[build] index.html はソースと一致しています"); }
+  else {
+    console.error("[build] index.html がソースと一致しません。node scripts/build-kabu.mjs を回してください");
+    process.exit(1);
+  }
 } else {
-  build().then(({ out, pin, from }) => {
-    if (has("--check")) {
-      const cur = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
-      // ビルド日付だけは毎日変わるので、比較から外す
-      const strip = (s) => s.replace(/ビルド \d{4}-\d{2}-\d{2}/, "ビルド ----");
-      if (strip(cur) === strip(out)) { console.log("[build] index.html はソースと一致しています"); return; }
-      console.error("[build] index.html がソースと一致しません。node scripts/build-kabu.mjs を回してください");
-      process.exit(1);
-    }
-    writeFileSync(OUT, out, "utf8");
-    console.log(`[build] 生成: index.html（${(out.length / 1024).toFixed(0)} KB・エンジン ${pin.commit.slice(0, 8)}・取得元 ${from}）`);
-  }).catch((e) => { console.error("[build] " + e.message); process.exit(1); });
+  writeFileSync(OUT, out, "utf8");
+  console.log(`[build] 生成: index.html（${(out.length / 1024).toFixed(0)} KB）`);
 }

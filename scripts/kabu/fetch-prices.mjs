@@ -20,7 +20,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { resolve } from "node:path";
-import { ROOT } from "./vendor-cb.mjs";
+import { ROOT } from "./paths.mjs";
 import { loadCore } from "./load.mjs";
 import * as yahoo from "./sources/yahoo.mjs";
 

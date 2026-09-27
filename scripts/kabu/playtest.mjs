@@ -17,7 +17,7 @@
 //   node scripts/kabu/playtest.mjs --runs 10    … 試行回数
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { ROOT } from "./vendor-cb.mjs";
+import { ROOT } from "./paths.mjs";
 import { loadCore } from "./load.mjs";
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? Number(process.argv[i + 1]) : d; };
@@ -265,7 +265,8 @@ function play(strategyName, seed) {
     while (foeCodes.length < 3) foeCodes.push(foeCodes[0]);
     for (const c of foeCodes.slice(0, 3)) foeSeen.set(c, (foeSeen.get(c) || 0) + 1);
     const myRare = mine.reduce((s, b) => s + b.kabu.rare, 0) / 3;
-    const foes = foeCodes.slice(0, 3).map((c) => { const b = beastOf(c, day, {}); return KB.scaleToParty(b, myRare, b.kabu.rare); });
+    const myHpAdd = mine.reduce((s, b) => s + (Number(b.hpAdd) || 0), 0) / 3;
+    const foes = foeCodes.slice(0, 3).map((c) => { const b = beastOf(c, day, {}); return KB.scaleToParty(b, myRare, b.kabu.rare, myHpAdd); });
 
     const res = CB.squadMatch(KB.squadOf(mine), KB.squadOf(foes), KB.hashStr(date));
     const win = res.scoreA > res.scoreB;

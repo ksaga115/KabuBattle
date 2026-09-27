@@ -31,13 +31,6 @@ jobs:
         with:
           node-version: "22"
 
-      # 対戦エンジン（BarcodeTool.html の固定コミット）の取得キャッシュ。
-      # 中身は vendor/BarcodeTool.commit の sha256 で照合するので、キャッシュが古くても事故らない。
-      - uses: actions/cache@v4
-        with:
-          path: vendor/cache
-          key: vendor-cb-${{ hashFiles('vendor/BarcodeTool.commit') }}
-
       - name: 日足を取って latest.json を作る
         run: node scripts/kabu/fetch-prices.mjs
 

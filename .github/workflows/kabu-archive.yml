@@ -29,13 +29,6 @@ jobs:
         with:
           node-version: "22"
 
-      # 対戦エンジン（BarcodeTool.html の固定コミット）の取得キャッシュ。
-      # 中身は vendor/BarcodeTool.commit の sha256 で照合するので、キャッシュが古くても事故らない。
-      - uses: actions/cache@v4
-        with:
-          path: vendor/cache
-          key: vendor-cb-${{ hashFiles('vendor/BarcodeTool.commit') }}
-
       # 畳める年が無ければ「無い」と言って正常終了する（毎年 1 回走るので空振りが普通）
       - name: 古い年を畳む
         run: node scripts/kabu/archive.mjs

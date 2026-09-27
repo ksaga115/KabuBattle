@@ -645,14 +645,29 @@ const KB = (function () {
     return { up: take(up), down: take(down), hot: take(hot) };
   }
 
-  /** 相手の強さを自パーティに合わせて素体を ±10% でスケール（設計書 §7.4 の梯子方式） */
-  function scaleToParty(beast, myAvgRare, theirRare) {
+  /**
+   * 相手の強さを自パーティに合わせてスケール（設計書 §7.4 の梯子方式）。
+   *
+   * 素体を ±10% するだけでは足りない。日替わりの相手は「その日の主役」＝中小型株が多く、
+   * 時価総額から来る体力（hpAdd）が小さい。こちらが大型株をそろえると体力だけ一方的に
+   * 開いて、勝率が 87% まで行ってしまった（実測）。体力も梯子に乗せる。
+   *
+   * ただし相手の体力を丸ごとこちらに置き換えると「大きい会社は打たれ強い」が消えるので、
+   * 相手自身の体力とこちらの平均の中間を取る。相手の素性は残しつつ、歯応えは保つ。
+   *
+   * @param {number} myAvgHpAdd 自パーティの hpAdd の平均。省略すると体力は触らない
+   */
+  function scaleToParty(beast, myAvgRare, theirRare, myAvgHpAdd) {
     const d = clamp((num(myAvgRare) - num(theirRare)) * 0.5, -0.10, 0.10);
     const stats = {};
     for (const k of CB.STAT_KEYS) stats[k] = clamp(Math.round(beast.stats[k] * (1 + d)), 1, 130);
     let sum = 0; for (const k of CB.STAT_KEYS) sum += stats[k];
     const total = Math.round(sum / 5);
-    return Object.assign({}, beast, { stats: stats, sum: sum, total: total, rank: CB.rankOf(total) });
+    const out = { stats: stats, sum: sum, total: total, rank: CB.rankOf(total) };
+    if (myAvgHpAdd != null) {
+      out.hpAdd = Math.round((num(beast.hpAdd) + num(myAvgHpAdd)) / 2 * (1 + d));
+    }
+    return Object.assign({}, beast, out);
   }
 
   // ══════════════ 株式分割・併合の検出（設計書 §8.3）══════════════

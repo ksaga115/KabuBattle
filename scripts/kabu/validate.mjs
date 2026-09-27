@@ -11,7 +11,7 @@
 //   node scripts/kabu/validate.mjs --quiet  … 失敗だけ表示
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { ROOT } from "./vendor-cb.mjs";
+import { ROOT } from "./paths.mjs";
 import { loadCore } from "./load.mjs";
 
 const KABU = resolve(ROOT, "kabu");

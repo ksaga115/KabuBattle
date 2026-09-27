@@ -379,7 +379,7 @@ export function buildIndex(opt = {}) {
 const THIN_NUM = ["close", "chg1", "chgYtd", "ytdPos", "volRatio", "range", "dev25",
   "per", "pbr", "sectorPer", "sectorPbr"];
 const THIN_FALSY = ["limitUp", "limitDown", "suspect", "provisional", "mcapTop10", "stale", "split", "earnings"];
-const THIN_KEEP = ["stats", "hp", "hpAdd", "rare", "rareRank", "traitKeys", "fiscalId"];
+const THIN_KEEP = ["stats", "hp", "hpAdd", "rare", "rareRank", "traitKeys", "fiscalId", "fund", "tech", "div", "mcap"];
 
 /** latest.json 1 銘柄ぶん → 日次に載せる薄い形 */
 export function thinStock(s) {
@@ -624,6 +624,18 @@ async function main() {
     s.traitKeys = b.kabu.traitKeys;
     if (b.kabu.provisional) s.provisional = true;   // 決算が無い銘柄（キーが無い＝決算あり）
     if (top10.has(code)) s.mcapTop10 = true;
+
+    // 今日のお題（設計書 §16）の判定に要る決算 3 項目。ゲームは銘柄ごとの fin/*.json を
+    // 一括では読まない（3,700 ファイル）ので、ここで 3 つだけ載せておく。
+    // 売上成長率・営業利益率・自己資本比率。1 銘柄 20 バイトほど。
+    for (const k of ["fund"]) delete s[k];
+    if (fin && Number(fin.sales) > 0) {
+      s.fund = {
+        g: round4(Number(fin.salesGrowth) || 0),
+        opm: round4(Number(fin.op) / Number(fin.sales)),
+        eq: round4(Number(fin.eqRatio) || 0)
+      };
+    }
 
     // 決算発表日（推定）。calendar.json（J-Quants 前提）に届かないので、設計書 §2 の
     // 「前回発表日 + 3 か月で推定」に沿って決算期末からの経過日数で立てる。

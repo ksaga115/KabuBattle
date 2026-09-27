@@ -119,7 +119,7 @@ details>summary{cursor:pointer;color:var(--dim);font-size:12px}
 <footer class="wrap pad small faint">
   データ: 株価・決算は Yahoo Finance、銘柄マスタは JPX「東証上場銘柄一覧」。
   対戦エンジンは <a href="https://github.com/ksaga115/BarcodeTool">BarcodeTool</a> のコードバトル（79da6202）。
-  ビルド 2026-09-26 ／ 遊びのためのもので、投資判断には使えません。
+  ビルド 2026-09-27 ／ 遊びのためのもので、投資判断には使えません。
 </footer>
 
 <dialog id="dlg"><div class="dlg-body" id="dlg-body"></div></dialog>
@@ -1861,6 +1861,91 @@ const KB = (function () {
     };
   }
 
+  // ══════════════ 今日のお題（設計書 §16）══════════════
+  // 毎日ひとつ、実在の投資スタイルがお題として出る。条件を満たす 3 体で勝つと報酬。
+  // 「全銘柄そろえたらやることが無い」への答えで、**持っている中からどう選ぶか**が毎日変わる。
+  // 条件はすべて公開データ（決算・株価・気質）から判定できるものだけにする。
+  //
+  // 日付だけで決まる（hash(date)）ので、いつ開いても同じお題。誰が遊んでも同じお題。
+  const CHALLENGES = [
+    {
+      key: "value", name: "バリュー投資", need: "PER 15 倍以下 かつ PBR 1 倍以下",
+      why: "割安に放置された会社を買う。グレアム以来の王道",
+      test: (s) => num(s.per) > 0 && num(s.per) <= 15 && num(s.pbr) > 0 && num(s.pbr) <= 1
+    },
+    {
+      key: "growth", name: "グロース投資", need: "売上成長率 15% 以上",
+      why: "伸びている会社に乗る。高くても買う",
+      test: (s) => s.fund && num(s.fund.g) >= 0.15
+    },
+    {
+      key: "income", name: "高配当", need: "配当利回り 3% 以上",
+      why: "値上がりではなく配当で受け取る",
+      test: (s) => num(s.close) > 0 && num(s.div) / num(s.close) >= 0.03
+    },
+    {
+      key: "defensive", name: "ディフェンシブ", need: "ベータ 0.5 以下",
+      why: "相場が荒れても動じない銘柄で固める",
+      test: (s) => s.tech && num(s.tech.beta, 1) <= 0.5
+    },
+    {
+      key: "small", name: "小型株", need: "時価総額 500 億円以下",
+      why: "まだ見つけられていない小さな会社を探す",
+      test: (s) => num(s.mcap) > 0 && num(s.mcap) <= 500 * OKU
+    },
+    {
+      key: "quality", name: "高収益", need: "営業利益率 20% 以上",
+      why: "安いものではなく、良いものを買う",
+      test: (s) => s.fund && num(s.fund.opm) >= 0.20
+    },
+    {
+      key: "fortress", name: "無借金経営", need: "自己資本比率 60% 以上",
+      why: "借金に頼らない会社だけで組む",
+      test: (s) => s.fund && num(s.fund.eq) >= 0.60
+    },
+    {
+      key: "momentum", name: "順張り", need: "年初来レンジの上位 20%",
+      why: "上がっているものはさらに上がる、に賭ける",
+      test: (s) => num(s.ytdPos) >= 0.80
+    },
+    {
+      key: "contrarian", name: "逆張り", need: "年初来レンジの下位 20%",
+      why: "落ちているものを拾う。いちばん勇気が要る",
+      test: (s) => num(s.ytdPos) <= 0.20
+    },
+    {
+      key: "liquid", name: "大型・高流動", need: "売買代金 10 億円/日 以上",
+      why: "いつでも売れる銘柄だけで戦う",
+      test: (s) => s.tech && num(s.tech.turnover) >= 10 * OKU
+    },
+    {
+      key: "calm", name: "低ボラティリティ", need: "値動きの荒さ 20% 以下",
+      why: "退屈なほど穏やかな銘柄を集める",
+      test: (s) => s.tech && num(s.tech.vol, 1) <= 0.20
+    },
+    {
+      key: "turnaround", name: "再生", need: "3 割超下げて高値圏の 9 割まで戻した",
+      why: "一度沈んで立て直した会社に賭ける",
+      test: (s) => s.tech && num(s.tech.mdd) <= -0.30 && num(s.tech.recovery) >= 0.90
+    }
+  ];
+
+  /** その日のお題。日付だけで決まる（いつ開いても同じ） */
+  function challengeOf(date) {
+    return CHALLENGES[hashStr("challenge|" + String(date)) % CHALLENGES.length];
+  }
+
+  /**
+   * ある銘柄がお題を満たすか。判定は latest.json に焼き込んだ値だけで完結する
+   * （ゲームは銘柄ごとの決算ファイルを一括では読まないため）。
+   * @param {object} ch お題（challengeOf の戻り値）
+   * @param {object} st latest.json の 1 銘柄
+   */
+  function meetsChallenge(ch, st) {
+    if (!ch || !st) return false;
+    try { return !!ch.test(st); } catch (e) { return false; }
+  }
+
   // ══════════════ 練度（保有の履歴・設計書 §15）══════════════
   // 現実の「長く持つほど成績のブレが縮む（時間分散）」を、そのまま持ち込む。
   // CB には熟練度（mastery 0〜5）があり、効果は「その個体のダメージの振れを 2%/段、
@@ -1920,7 +2005,9 @@ const KB = (function () {
     // 対戦
     protagonists: protagonists, MIN_MCAP: MIN_MCAP, scaleToParty: scaleToParty, squadOf: squadOf,
     // ポートフォリオ・練度（§15）
-    portfolio: portfolio, pairCorr: pairCorr, masteryOf: masteryOf, MASTERY_MAX: MASTERY_MAX
+    portfolio: portfolio, pairCorr: pairCorr, masteryOf: masteryOf, MASTERY_MAX: MASTERY_MAX,
+    // 今日のお題（§16）
+    CHALLENGES: CHALLENGES, challengeOf: challengeOf, meetsChallenge: meetsChallenge
   };
 })();
 
@@ -1952,6 +2039,7 @@ var UNIT = 100;
 var WIN_MIN = 5000, WIN_MAX = 50000;      // 勝利報酬（相手の強さに応じて）
 var PREDICT_REWARD = 3000;                // 予想の的中 1 体ぶん
 var PREDICT_BONUS = 5000;                 // パーティ全的中
+var CHALLENGE_REWARD = 30000;             // 今日のお題（§16）を満たす 3 体で勝つ
 
 function blankSeason(id) {
   return {
@@ -1979,6 +2067,11 @@ function blankStore() {
     streak: {},            // code -> 予想の連勝数
     results: [],           // 直近の精算結果（新しい順・最大 60 件）
     stats: { days: 0, wins: 0, losses: 0, hits: 0, misses: 0, best: 0, streak: 0 },
+    // 今日のお題（設計書 §16）。done = 達成した日付、clears = 種類ごとの達成回数
+    challenge: { done: "", total: 0, clears: {} },
+    // 運用の出発点（設計書 §16）。初めて精算した日の総資産と日経平均を覚えておいて、
+    // 「日経に勝てているか」を出す。実在の投資でいちばん見られる指標
+    origin: { date: "", assets: 0, nk: 0 },
     seenIntro: false,
     // ── ここから下は後から足したフィールド。古いセーブには無い（無くても動く）──
     delisted: [],          // 旅立ち（上場廃止で自動的に手放した記録。設計書 §8.4）
@@ -2016,6 +2109,16 @@ function loadStore() {
     if (typeof j.settledTo === "string") s.settledTo = j.settledTo;
     if (j.predict && typeof j.predict === "object") s.predict = j.predict;
     if (j.streak && typeof j.streak === "object") s.streak = j.streak;
+    if (j.origin && typeof j.origin === "object") {
+      s.origin.date = typeof j.origin.date === "string" ? j.origin.date : "";
+      s.origin.assets = Math.max(0, num(j.origin.assets, 0));
+      s.origin.nk = Math.max(0, num(j.origin.nk, 0));
+    }
+    if (j.challenge && typeof j.challenge === "object") {
+      s.challenge.done = typeof j.challenge.done === "string" ? j.challenge.done : "";
+      s.challenge.total = Math.max(0, num(j.challenge.total, 0));
+      if (j.challenge.clears && typeof j.challenge.clears === "object") s.challenge.clears = j.challenge.clears;
+    }
     if (Array.isArray(j.results)) s.results = j.results.slice(0, 60);
     if (j.stats && typeof j.stats === "object") Object.assign(s.stats, j.stats);
     s.seenIntro = !!j.seenIntro;
@@ -2476,6 +2579,34 @@ function viewHome() {
   });
   h.push('</div></div>');
 
+  // 今日のお題（設計書 §16）
+  var ch = KB.challengeOf(D.latest.date);
+  var done = !!(store.challenge && store.challenge.done === D.latest.date);
+  var party = store.party.filter(function (c) { return c && stateOf(c); });
+  var pass = party.filter(function (c) { return KB.meetsChallenge(ch, stateOf(c)); });
+  var ready = party.length === 3 && pass.length === 3;
+  h.push('<div class="card"><div class="spread">' +
+    '<div><h2>今日のお題 — ' + esc(ch.name) + '</h2>' +
+    '<div class="muted small">' + esc(ch.need) + '</div></div>' +
+    (done ? '<span class="tag on">達成ずみ</span>' : ready ? '<span class="tag on">条件を満たしています</span>' :
+      '<span class="tag">' + pass.length + ' / 3 体</span>') + '</div>');
+  h.push('<div class="faint small" style="margin-top:4px">' + esc(ch.why) + '</div>');
+  if (party.length) {
+    h.push('<div class="row small" style="margin-top:8px">' + party.map(function (c) {
+      var ok = KB.meetsChallenge(ch, stateOf(c));
+      return '<span class="' + (ok ? "tag on" : "tag") + '">' + (ok ? "○ " : "× ") + esc(stockOf(c).short) + '</span>';
+    }).join("") + '</div>');
+  }
+  h.push('<div class="row" style="margin-top:8px">' +
+    '<button class="sm" data-chfilter="1">この条件の銘柄を市場で探す</button>' +
+    '<span class="faint small">3 体そろえて勝つと ' + yen(CHALLENGE_REWARD) + ' 円。日付で決まるので、いつ開いても同じお題です。</span></div>');
+  var cl = (store.challenge && store.challenge.clears) || {};
+  var clearedKinds = Object.keys(cl).length;
+  h.push('<div class="muted small" style="margin-top:6px">達成 ' + num(store.challenge && store.challenge.total) +
+    ' 回 ／ ' + clearedKinds + ' / ' + KB.CHALLENGES.length + ' 種類を制覇' +
+    (clearedKinds >= KB.CHALLENGES.length ? ' <span class="tag on">全制覇</span>' : "") + '</div>');
+  h.push('</div>');
+
   // パーティ
   h.push('<div class="card"><div class="spread"><h2>パーティ</h2><button class="sm" data-tab="party">編成する</button></div>');
   h.push('<div class="grid" style="margin-top:10px">');
@@ -2493,6 +2624,24 @@ function viewHome() {
 
   // これまで（通算・今のシーズン・称号）
   h.push('<div class="card"><h2>これまで</h2>');
+
+  // 日経平均に勝てているか（設計書 §16）。実在の投資でいちばん見られる指標
+  if (store.origin.date && store.origin.assets > 0) {
+    var nowAssets = store.cash + heldValue();
+    var mine2 = nowAssets / store.origin.assets - 1;
+    var nkNow = num((D.latest.market || {}).nk225);
+    var nkRet = store.origin.nk > 0 && nkNow > 0 ? nkNow / store.origin.nk - 1 : 0;
+    var alpha = mine2 - nkRet;
+    h.push('<div class="row" style="margin:6px 0 10px">' +
+      '<span>あなたの運用 <b class="num ' + cls(mine2) + '" style="font-size:16px">' + pct(mine2, 1) + '</b></span>' +
+      '<span class="muted">日経平均 <b class="num ' + cls(nkRet) + '">' + pct(nkRet, 1) + '</b></span>' +
+      '<span class="tag' + (alpha > 0.0005 ? " on" : "") + '">' +
+      (Math.abs(alpha) <= 0.0005 ? "日経と互角" :
+        (alpha > 0 ? "日経に勝っています +" : "日経に負けています ") + (alpha * 100).toFixed(1) + " pt") + '</span>' +
+      '</div>' +
+      '<div class="faint small" style="margin-bottom:8px">' + esc(store.origin.date) + ' の総資産 ' +
+      yen(store.origin.assets) + ' 円から数えています。指数に勝ち続けるのは、現実でもとても難しいことです。</div>');
+  }
   var s = store.stats;
   h.push('<div class="row small muted" style="margin:6px 0 10px">' +
     '<span>' + s.days + ' 日</span><span>勝 <b class="up">' + s.wins + '</b> 敗 <b class="down">' + s.losses + '</b></span>' +
@@ -2572,7 +2721,7 @@ function homeSeason() {
 // ══════════════ 市場（契約）══════════════
 // 銘柄が数千になるので、検索・絞り込みで細めてから 100 件ずつ出す（全件を一度に描かない）。
 var marketSort = { key: "mcap", desc: true };
-var marketQ = { q: "", elem: "", rare: "", idx: "", fin: "", held: false, limit: 100 };
+var marketQ = { q: "", elem: "", rare: "", idx: "", fin: "", held: false, ch: false, limit: 100 };
 var RARE_ORDER = ["SS", "S", "A", "B", "C", "D"];
 var INDEX_LABEL = { core30: "TOPIX Core30", large70: "TOPIX Large70", mid400: "TOPIX Mid400", nk225: "日経 225" };
 var idxOptions = [];
@@ -2612,6 +2761,8 @@ function filteredCodes(q) {
     // 決算がまだ取れていない銘柄は暫定素体（レア度 C）で、見た目がそろってしまうので分けられるようにする
     if (q.fin === "yes" && st.provisional) continue;
     if (q.fin === "no" && !st.provisional) continue;
+    // 今日のお題（§16）の条件で絞る
+    if (q.ch && !KB.meetsChallenge(KB.challengeOf(D.latest.date), st)) continue;
     out.push(c);
   }
   return out;
@@ -2649,6 +2800,8 @@ function filterBar(prefix, q, withRare) {
       '<option value="no"' + (q.fin === "no" ? " selected" : "") + '>決算まち（暫定素体）</option></select>');
   }
   h.push('<label class="chk"><input type="checkbox" id="' + prefix + '-held"' + (q.held ? " checked" : "") + '>契約中のみ</label>');
+  h.push('<label class="chk"><input type="checkbox" id="' + prefix + '-ch"' + (q.ch ? " checked" : "") + '>今日のお題（' +
+    esc(KB.challengeOf(D.latest.date).name) + '）だけ</label>');
   h.push('</div>');
   return h.join("");
 }
@@ -3183,6 +3336,13 @@ function settleOneDay(day, notes) {
   var preds = store.predict[date] || {};
   var gain = 0, hits = 0, misses = 0;
 
+  // 運用の出発点を、初めて精算した日に記録する（設計書 §16）
+  if (!store.origin.date) {
+    store.origin.date = date;
+    store.origin.assets = store.cash + heldValue();
+    store.origin.nk = num((day.market || {}).nk225);
+  }
+
   // 予想の答え合わせ（±0.3% 以内は引き分け＝外れ扱いにしない）
   var extras = {};
   store.party.forEach(function (code) {
@@ -3220,6 +3380,18 @@ function settleOneDay(day, notes) {
   var foeStrength = foes.reduce(function (s, b) { return s + b.total; }, 0) / 3;
   if (win) gain += Math.round(WIN_MIN + Math.max(0, Math.min(1, (foeStrength - 30) / 60)) * (WIN_MAX - WIN_MIN));
 
+  // 今日のお題（設計書 §16）。条件を満たす 3 体で勝った日だけ。1 日 1 回。
+  var ch = KB.challengeOf(date);
+  var chDone = false;
+  if (win && store.challenge.done !== date &&
+      store.party.every(function (c) { return c && stateOf(c, day) && KB.meetsChallenge(ch, stateOf(c, day)); })) {
+    gain += CHALLENGE_REWARD;
+    store.challenge.done = date;
+    store.challenge.total = num(store.challenge.total) + 1;
+    store.challenge.clears[ch.key] = num(store.challenge.clears[ch.key]) + 1;
+    chDone = true;
+  }
+
   store.cash += gain;
   store.stats.days++;
   // 練度のもと（設計書 §15）。精算した日に、そのとき持っていた銘柄だけ 1 日ぶん増える。
@@ -3252,8 +3424,10 @@ function settleOneDay(day, notes) {
     date: date, win: win, scoreA: res.scoreA, scoreB: res.scoreB, gain: gain,
     foe: foeCodes.slice(0, 3).map(function (c) { return stockOf(c) ? stockOf(c).short : c; }).join("・"),
     mine: mine.map(function (b) { return b.name; }),
-    hits: hits, misses: misses
+    hits: hits, misses: misses,
+    challenge: chDone ? ch.name : ""
   };
+  if (chDone) notes.push({ kind: "challenge", text: "今日のお題「" + ch.name + "」（" + ch.need + "）を達成しました。" + yen(CHALLENGE_REWARD) + " 円。" });
   store.results.unshift(record);
   store.results = store.results.slice(0, 60);
   delete store.predict[date];
@@ -3283,7 +3457,8 @@ function showBattle(out, dayCount, notes) {
     (rec.win ? "勝ち" : "負け") + ' ' + rec.scoreA + ' - ' + rec.scoreB + '</span>' +
     '<span class="muted">獲得 <b class="num">' + yen(rec.gain) + '</b> 円</span>' +
     (rec.hits ? '<span class="tag on">予想的中 ' + rec.hits + '</span>' : "") +
-    (rec.misses ? '<span class="tag">予想外れ ' + rec.misses + '</span>' : "") + '</div>');
+    (rec.misses ? '<span class="tag">予想外れ ' + rec.misses + '</span>' : "") +
+    (rec.challenge ? '<span class="tag on">お題「' + esc(rec.challenge) + '」達成</span>' : "") + '</div>');
 
   h.push(notesHtml(notes));
 
@@ -3394,7 +3569,7 @@ function importSave() {
 
 // ══════════════ 操作 ══════════════
 document.addEventListener("click", function (ev) {
-  var t = ev.target.closest("[data-tab],[data-code],[data-buy],[data-sell],[data-sort],[data-slotin],[data-unslot],[data-pred],[data-close],[data-more],#btn-settle,#btn-export,#btn-import,#btn-reset");
+  var t = ev.target.closest("[data-tab],[data-code],[data-buy],[data-sell],[data-sort],[data-slotin],[data-unslot],[data-pred],[data-close],[data-more],[data-chfilter],#btn-settle,#btn-export,#btn-import,#btn-reset");
   if (!t) return;
 
   if (t.hasAttribute("data-close")) { ev.preventDefault(); dlgCode = ""; $("dlg").close(); return; }
@@ -3448,6 +3623,12 @@ document.addEventListener("click", function (ev) {
     if (store.predict[d][c] === v) delete store.predict[d][c]; else store.predict[d][c] = v;
     saveStore(); render(); return;
   }
+  if (t.hasAttribute("data-chfilter")) {
+    // 今日のお題の条件で市場を絞って見せる
+    ev.preventDefault();
+    marketQ.ch = true; marketQ.held = false; marketQ.limit = 100;
+    tab = "market"; $("dlg").close(); render(); return;
+  }
   if (t.hasAttribute("data-code")) { ev.preventDefault(); showStock(t.getAttribute("data-code")); return; }
 });
 
@@ -3469,6 +3650,7 @@ document.addEventListener("change", function (ev) {
   else if (key === "idx") q.idx = t.value;
   else if (key === "fin") q.fin = t.value;
   else if (key === "held") q.held = !!t.checked;
+  else if (key === "ch") q.ch = !!t.checked;
   else return;
   q.limit = 100;
   render();

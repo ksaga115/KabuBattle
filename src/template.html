@@ -157,6 +157,7 @@ var UNIT = 100;
 var WIN_MIN = 5000, WIN_MAX = 50000;      // 勝利報酬（相手の強さに応じて）
 var PREDICT_REWARD = 3000;                // 予想の的中 1 体ぶん
 var PREDICT_BONUS = 5000;                 // パーティ全的中
+var CHALLENGE_REWARD = 30000;             // 今日のお題（§16）を満たす 3 体で勝つ
 
 function blankSeason(id) {
   return {
@@ -184,6 +185,11 @@ function blankStore() {
     streak: {},            // code -> 予想の連勝数
     results: [],           // 直近の精算結果（新しい順・最大 60 件）
     stats: { days: 0, wins: 0, losses: 0, hits: 0, misses: 0, best: 0, streak: 0 },
+    // 今日のお題（設計書 §16）。done = 達成した日付、clears = 種類ごとの達成回数
+    challenge: { done: "", total: 0, clears: {} },
+    // 運用の出発点（設計書 §16）。初めて精算した日の総資産と日経平均を覚えておいて、
+    // 「日経に勝てているか」を出す。実在の投資でいちばん見られる指標
+    origin: { date: "", assets: 0, nk: 0 },
     seenIntro: false,
     // ── ここから下は後から足したフィールド。古いセーブには無い（無くても動く）──
     delisted: [],          // 旅立ち（上場廃止で自動的に手放した記録。設計書 §8.4）
@@ -221,6 +227,16 @@ function loadStore() {
     if (typeof j.settledTo === "string") s.settledTo = j.settledTo;
     if (j.predict && typeof j.predict === "object") s.predict = j.predict;
     if (j.streak && typeof j.streak === "object") s.streak = j.streak;
+    if (j.origin && typeof j.origin === "object") {
+      s.origin.date = typeof j.origin.date === "string" ? j.origin.date : "";
+      s.origin.assets = Math.max(0, num(j.origin.assets, 0));
+      s.origin.nk = Math.max(0, num(j.origin.nk, 0));
+    }
+    if (j.challenge && typeof j.challenge === "object") {
+      s.challenge.done = typeof j.challenge.done === "string" ? j.challenge.done : "";
+      s.challenge.total = Math.max(0, num(j.challenge.total, 0));
+      if (j.challenge.clears && typeof j.challenge.clears === "object") s.challenge.clears = j.challenge.clears;
+    }
     if (Array.isArray(j.results)) s.results = j.results.slice(0, 60);
     if (j.stats && typeof j.stats === "object") Object.assign(s.stats, j.stats);
     s.seenIntro = !!j.seenIntro;
@@ -681,6 +697,34 @@ function viewHome() {
   });
   h.push('</div></div>');
 
+  // 今日のお題（設計書 §16）
+  var ch = KB.challengeOf(D.latest.date);
+  var done = !!(store.challenge && store.challenge.done === D.latest.date);
+  var party = store.party.filter(function (c) { return c && stateOf(c); });
+  var pass = party.filter(function (c) { return KB.meetsChallenge(ch, stateOf(c)); });
+  var ready = party.length === 3 && pass.length === 3;
+  h.push('<div class="card"><div class="spread">' +
+    '<div><h2>今日のお題 — ' + esc(ch.name) + '</h2>' +
+    '<div class="muted small">' + esc(ch.need) + '</div></div>' +
+    (done ? '<span class="tag on">達成ずみ</span>' : ready ? '<span class="tag on">条件を満たしています</span>' :
+      '<span class="tag">' + pass.length + ' / 3 体</span>') + '</div>');
+  h.push('<div class="faint small" style="margin-top:4px">' + esc(ch.why) + '</div>');
+  if (party.length) {
+    h.push('<div class="row small" style="margin-top:8px">' + party.map(function (c) {
+      var ok = KB.meetsChallenge(ch, stateOf(c));
+      return '<span class="' + (ok ? "tag on" : "tag") + '">' + (ok ? "○ " : "× ") + esc(stockOf(c).short) + '</span>';
+    }).join("") + '</div>');
+  }
+  h.push('<div class="row" style="margin-top:8px">' +
+    '<button class="sm" data-chfilter="1">この条件の銘柄を市場で探す</button>' +
+    '<span class="faint small">3 体そろえて勝つと ' + yen(CHALLENGE_REWARD) + ' 円。日付で決まるので、いつ開いても同じお題です。</span></div>');
+  var cl = (store.challenge && store.challenge.clears) || {};
+  var clearedKinds = Object.keys(cl).length;
+  h.push('<div class="muted small" style="margin-top:6px">達成 ' + num(store.challenge && store.challenge.total) +
+    ' 回 ／ ' + clearedKinds + ' / ' + KB.CHALLENGES.length + ' 種類を制覇' +
+    (clearedKinds >= KB.CHALLENGES.length ? ' <span class="tag on">全制覇</span>' : "") + '</div>');
+  h.push('</div>');
+
   // パーティ
   h.push('<div class="card"><div class="spread"><h2>パーティ</h2><button class="sm" data-tab="party">編成する</button></div>');
   h.push('<div class="grid" style="margin-top:10px">');
@@ -698,6 +742,24 @@ function viewHome() {
 
   // これまで（通算・今のシーズン・称号）
   h.push('<div class="card"><h2>これまで</h2>');
+
+  // 日経平均に勝てているか（設計書 §16）。実在の投資でいちばん見られる指標
+  if (store.origin.date && store.origin.assets > 0) {
+    var nowAssets = store.cash + heldValue();
+    var mine2 = nowAssets / store.origin.assets - 1;
+    var nkNow = num((D.latest.market || {}).nk225);
+    var nkRet = store.origin.nk > 0 && nkNow > 0 ? nkNow / store.origin.nk - 1 : 0;
+    var alpha = mine2 - nkRet;
+    h.push('<div class="row" style="margin:6px 0 10px">' +
+      '<span>あなたの運用 <b class="num ' + cls(mine2) + '" style="font-size:16px">' + pct(mine2, 1) + '</b></span>' +
+      '<span class="muted">日経平均 <b class="num ' + cls(nkRet) + '">' + pct(nkRet, 1) + '</b></span>' +
+      '<span class="tag' + (alpha > 0.0005 ? " on" : "") + '">' +
+      (Math.abs(alpha) <= 0.0005 ? "日経と互角" :
+        (alpha > 0 ? "日経に勝っています +" : "日経に負けています ") + (alpha * 100).toFixed(1) + " pt") + '</span>' +
+      '</div>' +
+      '<div class="faint small" style="margin-bottom:8px">' + esc(store.origin.date) + ' の総資産 ' +
+      yen(store.origin.assets) + ' 円から数えています。指数に勝ち続けるのは、現実でもとても難しいことです。</div>');
+  }
   var s = store.stats;
   h.push('<div class="row small muted" style="margin:6px 0 10px">' +
     '<span>' + s.days + ' 日</span><span>勝 <b class="up">' + s.wins + '</b> 敗 <b class="down">' + s.losses + '</b></span>' +
@@ -777,7 +839,7 @@ function homeSeason() {
 // ══════════════ 市場（契約）══════════════
 // 銘柄が数千になるので、検索・絞り込みで細めてから 100 件ずつ出す（全件を一度に描かない）。
 var marketSort = { key: "mcap", desc: true };
-var marketQ = { q: "", elem: "", rare: "", idx: "", fin: "", held: false, limit: 100 };
+var marketQ = { q: "", elem: "", rare: "", idx: "", fin: "", held: false, ch: false, limit: 100 };
 var RARE_ORDER = ["SS", "S", "A", "B", "C", "D"];
 var INDEX_LABEL = { core30: "TOPIX Core30", large70: "TOPIX Large70", mid400: "TOPIX Mid400", nk225: "日経 225" };
 var idxOptions = [];
@@ -817,6 +879,8 @@ function filteredCodes(q) {
     // 決算がまだ取れていない銘柄は暫定素体（レア度 C）で、見た目がそろってしまうので分けられるようにする
     if (q.fin === "yes" && st.provisional) continue;
     if (q.fin === "no" && !st.provisional) continue;
+    // 今日のお題（§16）の条件で絞る
+    if (q.ch && !KB.meetsChallenge(KB.challengeOf(D.latest.date), st)) continue;
     out.push(c);
   }
   return out;
@@ -854,6 +918,8 @@ function filterBar(prefix, q, withRare) {
       '<option value="no"' + (q.fin === "no" ? " selected" : "") + '>決算まち（暫定素体）</option></select>');
   }
   h.push('<label class="chk"><input type="checkbox" id="' + prefix + '-held"' + (q.held ? " checked" : "") + '>契約中のみ</label>');
+  h.push('<label class="chk"><input type="checkbox" id="' + prefix + '-ch"' + (q.ch ? " checked" : "") + '>今日のお題（' +
+    esc(KB.challengeOf(D.latest.date).name) + '）だけ</label>');
   h.push('</div>');
   return h.join("");
 }
@@ -1388,6 +1454,13 @@ function settleOneDay(day, notes) {
   var preds = store.predict[date] || {};
   var gain = 0, hits = 0, misses = 0;
 
+  // 運用の出発点を、初めて精算した日に記録する（設計書 §16）
+  if (!store.origin.date) {
+    store.origin.date = date;
+    store.origin.assets = store.cash + heldValue();
+    store.origin.nk = num((day.market || {}).nk225);
+  }
+
   // 予想の答え合わせ（±0.3% 以内は引き分け＝外れ扱いにしない）
   var extras = {};
   store.party.forEach(function (code) {
@@ -1425,6 +1498,18 @@ function settleOneDay(day, notes) {
   var foeStrength = foes.reduce(function (s, b) { return s + b.total; }, 0) / 3;
   if (win) gain += Math.round(WIN_MIN + Math.max(0, Math.min(1, (foeStrength - 30) / 60)) * (WIN_MAX - WIN_MIN));
 
+  // 今日のお題（設計書 §16）。条件を満たす 3 体で勝った日だけ。1 日 1 回。
+  var ch = KB.challengeOf(date);
+  var chDone = false;
+  if (win && store.challenge.done !== date &&
+      store.party.every(function (c) { return c && stateOf(c, day) && KB.meetsChallenge(ch, stateOf(c, day)); })) {
+    gain += CHALLENGE_REWARD;
+    store.challenge.done = date;
+    store.challenge.total = num(store.challenge.total) + 1;
+    store.challenge.clears[ch.key] = num(store.challenge.clears[ch.key]) + 1;
+    chDone = true;
+  }
+
   store.cash += gain;
   store.stats.days++;
   // 練度のもと（設計書 §15）。精算した日に、そのとき持っていた銘柄だけ 1 日ぶん増える。
@@ -1457,8 +1542,10 @@ function settleOneDay(day, notes) {
     date: date, win: win, scoreA: res.scoreA, scoreB: res.scoreB, gain: gain,
     foe: foeCodes.slice(0, 3).map(function (c) { return stockOf(c) ? stockOf(c).short : c; }).join("・"),
     mine: mine.map(function (b) { return b.name; }),
-    hits: hits, misses: misses
+    hits: hits, misses: misses,
+    challenge: chDone ? ch.name : ""
   };
+  if (chDone) notes.push({ kind: "challenge", text: "今日のお題「" + ch.name + "」（" + ch.need + "）を達成しました。" + yen(CHALLENGE_REWARD) + " 円。" });
   store.results.unshift(record);
   store.results = store.results.slice(0, 60);
   delete store.predict[date];
@@ -1488,7 +1575,8 @@ function showBattle(out, dayCount, notes) {
     (rec.win ? "勝ち" : "負け") + ' ' + rec.scoreA + ' - ' + rec.scoreB + '</span>' +
     '<span class="muted">獲得 <b class="num">' + yen(rec.gain) + '</b> 円</span>' +
     (rec.hits ? '<span class="tag on">予想的中 ' + rec.hits + '</span>' : "") +
-    (rec.misses ? '<span class="tag">予想外れ ' + rec.misses + '</span>' : "") + '</div>');
+    (rec.misses ? '<span class="tag">予想外れ ' + rec.misses + '</span>' : "") +
+    (rec.challenge ? '<span class="tag on">お題「' + esc(rec.challenge) + '」達成</span>' : "") + '</div>');
 
   h.push(notesHtml(notes));
 
@@ -1599,7 +1687,7 @@ function importSave() {
 
 // ══════════════ 操作 ══════════════
 document.addEventListener("click", function (ev) {
-  var t = ev.target.closest("[data-tab],[data-code],[data-buy],[data-sell],[data-sort],[data-slotin],[data-unslot],[data-pred],[data-close],[data-more],#btn-settle,#btn-export,#btn-import,#btn-reset");
+  var t = ev.target.closest("[data-tab],[data-code],[data-buy],[data-sell],[data-sort],[data-slotin],[data-unslot],[data-pred],[data-close],[data-more],[data-chfilter],#btn-settle,#btn-export,#btn-import,#btn-reset");
   if (!t) return;
 
   if (t.hasAttribute("data-close")) { ev.preventDefault(); dlgCode = ""; $("dlg").close(); return; }
@@ -1653,6 +1741,12 @@ document.addEventListener("click", function (ev) {
     if (store.predict[d][c] === v) delete store.predict[d][c]; else store.predict[d][c] = v;
     saveStore(); render(); return;
   }
+  if (t.hasAttribute("data-chfilter")) {
+    // 今日のお題の条件で市場を絞って見せる
+    ev.preventDefault();
+    marketQ.ch = true; marketQ.held = false; marketQ.limit = 100;
+    tab = "market"; $("dlg").close(); render(); return;
+  }
   if (t.hasAttribute("data-code")) { ev.preventDefault(); showStock(t.getAttribute("data-code")); return; }
 });
 
@@ -1674,6 +1768,7 @@ document.addEventListener("change", function (ev) {
   else if (key === "idx") q.idx = t.value;
   else if (key === "fin") q.fin = t.value;
   else if (key === "held") q.held = !!t.checked;
+  else if (key === "ch") q.ch = !!t.checked;
   else return;
   q.limit = 100;
   render();

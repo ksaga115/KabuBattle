@@ -730,6 +730,91 @@ const KB = (function () {
     };
   }
 
+  // ══════════════ 今日のお題（設計書 §16）══════════════
+  // 毎日ひとつ、実在の投資スタイルがお題として出る。条件を満たす 3 体で勝つと報酬。
+  // 「全銘柄そろえたらやることが無い」への答えで、**持っている中からどう選ぶか**が毎日変わる。
+  // 条件はすべて公開データ（決算・株価・気質）から判定できるものだけにする。
+  //
+  // 日付だけで決まる（hash(date)）ので、いつ開いても同じお題。誰が遊んでも同じお題。
+  const CHALLENGES = [
+    {
+      key: "value", name: "バリュー投資", need: "PER 15 倍以下 かつ PBR 1 倍以下",
+      why: "割安に放置された会社を買う。グレアム以来の王道",
+      test: (s) => num(s.per) > 0 && num(s.per) <= 15 && num(s.pbr) > 0 && num(s.pbr) <= 1
+    },
+    {
+      key: "growth", name: "グロース投資", need: "売上成長率 15% 以上",
+      why: "伸びている会社に乗る。高くても買う",
+      test: (s) => s.fund && num(s.fund.g) >= 0.15
+    },
+    {
+      key: "income", name: "高配当", need: "配当利回り 3% 以上",
+      why: "値上がりではなく配当で受け取る",
+      test: (s) => num(s.close) > 0 && num(s.div) / num(s.close) >= 0.03
+    },
+    {
+      key: "defensive", name: "ディフェンシブ", need: "ベータ 0.5 以下",
+      why: "相場が荒れても動じない銘柄で固める",
+      test: (s) => s.tech && num(s.tech.beta, 1) <= 0.5
+    },
+    {
+      key: "small", name: "小型株", need: "時価総額 500 億円以下",
+      why: "まだ見つけられていない小さな会社を探す",
+      test: (s) => num(s.mcap) > 0 && num(s.mcap) <= 500 * OKU
+    },
+    {
+      key: "quality", name: "高収益", need: "営業利益率 20% 以上",
+      why: "安いものではなく、良いものを買う",
+      test: (s) => s.fund && num(s.fund.opm) >= 0.20
+    },
+    {
+      key: "fortress", name: "無借金経営", need: "自己資本比率 60% 以上",
+      why: "借金に頼らない会社だけで組む",
+      test: (s) => s.fund && num(s.fund.eq) >= 0.60
+    },
+    {
+      key: "momentum", name: "順張り", need: "年初来レンジの上位 20%",
+      why: "上がっているものはさらに上がる、に賭ける",
+      test: (s) => num(s.ytdPos) >= 0.80
+    },
+    {
+      key: "contrarian", name: "逆張り", need: "年初来レンジの下位 20%",
+      why: "落ちているものを拾う。いちばん勇気が要る",
+      test: (s) => num(s.ytdPos) <= 0.20
+    },
+    {
+      key: "liquid", name: "大型・高流動", need: "売買代金 10 億円/日 以上",
+      why: "いつでも売れる銘柄だけで戦う",
+      test: (s) => s.tech && num(s.tech.turnover) >= 10 * OKU
+    },
+    {
+      key: "calm", name: "低ボラティリティ", need: "値動きの荒さ 20% 以下",
+      why: "退屈なほど穏やかな銘柄を集める",
+      test: (s) => s.tech && num(s.tech.vol, 1) <= 0.20
+    },
+    {
+      key: "turnaround", name: "再生", need: "3 割超下げて高値圏の 9 割まで戻した",
+      why: "一度沈んで立て直した会社に賭ける",
+      test: (s) => s.tech && num(s.tech.mdd) <= -0.30 && num(s.tech.recovery) >= 0.90
+    }
+  ];
+
+  /** その日のお題。日付だけで決まる（いつ開いても同じ） */
+  function challengeOf(date) {
+    return CHALLENGES[hashStr("challenge|" + String(date)) % CHALLENGES.length];
+  }
+
+  /**
+   * ある銘柄がお題を満たすか。判定は latest.json に焼き込んだ値だけで完結する
+   * （ゲームは銘柄ごとの決算ファイルを一括では読まないため）。
+   * @param {object} ch お題（challengeOf の戻り値）
+   * @param {object} st latest.json の 1 銘柄
+   */
+  function meetsChallenge(ch, st) {
+    if (!ch || !st) return false;
+    try { return !!ch.test(st); } catch (e) { return false; }
+  }
+
   // ══════════════ 練度（保有の履歴・設計書 §15）══════════════
   // 現実の「長く持つほど成績のブレが縮む（時間分散）」を、そのまま持ち込む。
   // CB には熟練度（mastery 0〜5）があり、効果は「その個体のダメージの振れを 2%/段、
@@ -789,6 +874,8 @@ const KB = (function () {
     // 対戦
     protagonists: protagonists, MIN_MCAP: MIN_MCAP, scaleToParty: scaleToParty, squadOf: squadOf,
     // ポートフォリオ・練度（§15）
-    portfolio: portfolio, pairCorr: pairCorr, masteryOf: masteryOf, MASTERY_MAX: MASTERY_MAX
+    portfolio: portfolio, pairCorr: pairCorr, masteryOf: masteryOf, MASTERY_MAX: MASTERY_MAX,
+    // 今日のお題（§16）
+    CHALLENGES: CHALLENGES, challengeOf: challengeOf, meetsChallenge: meetsChallenge
   };
 })();

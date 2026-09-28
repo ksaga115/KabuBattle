@@ -1216,6 +1216,36 @@ function showStock(code) {
     (today.kabu.tags.length ? today.kabu.tags.map(function (t) { return '<span class="tag on">' + esc(t) + '</span>'; }).join(" ")
       : '<span class="faint">今日は特に何も起きていません（素体のまま戦います）</span>') + '</div>');
 
+  // 決算の要点（設計書 §18）。素体と特性がどこから来ているかを、数字のまま見せる
+  var fq = st.fund;
+  if (fq) {
+    var fpct = function (v, d) { return v == null ? null : (Number(v) * 100).toFixed(d === undefined ? 1 : d) + "%"; };
+    var fx = function (v, d) { return v == null ? null : Number(v).toFixed(d === undefined ? 2 : d) + " 倍"; };
+    var items = [
+      ["粗利率", fpct(fq.gm), "値段を自分で決められるか"],
+      ["営業利益率", fpct(fq.opm), "本業の儲け"],
+      ["ROIC", fpct(fq.roic), "預かった資本をどれだけ増やせたか"],
+      ["フリーCF／売上", fpct(fq.fcfm), "手元に残る現金"],
+      ["自己資本比率", fpct(fq.eq, 0), "借金に頼っていないか"],
+      ["ネットデット／EBITDA", fq.nde == null ? null : Number(fq.nde).toFixed(2) + " 年", "借金を返すのに何年ぶんの利益が要るか"],
+      ["流動比率", fx(fq.cr), "短期の支払いへの備え"],
+      ["インタレストカバレッジ", fx(fq.ic, 1), "利払いの余力"],
+      ["売上成長率", fpct(fq.g), "伸びているか"],
+      ["有形固定資産／総資産", fpct(fq.ppe, 0), "設備の重さ（装置産業か）"],
+      ["のれん／総資産", fpct(fq.gw, 0), "買収への依存"],
+      ["利益剰余金／総資産", fpct(fq.re, 0), "積み上げた厚み"],
+      ["配当性向", fpct(fq.po, 0), "利益のうち配当に回す割合"],
+      ["自社株買い／売上", fpct(fq.bb), "買い戻しでの還元"],
+      ["研究開発費／売上", fpct(fq.rnd), "将来への仕込み"]
+    ].filter(function (x) { return x[1] != null; });
+    h.push('<h3 style="margin-top:14px">決算の要点</h3>' +
+      '<div class="muted small">素体と特性はここから決まります。' + items.length + ' 項目が取れています。</div>');
+    h.push('<table style="margin-top:6px"><tbody>' + items.map(function (x) {
+      return '<tr><td>' + esc(x[0]) + '</td><td class="num"><b>' + esc(x[1]) + '</b></td>' +
+        '<td class="faint small hide-s">' + esc(x[2]) + '</td></tr>';
+    }).join("") + '</tbody></table>');
+  }
+
   // 気質（設計書 §15）。日足 1 年から計算した、その銘柄の性格
   var tq = st.tech;
   if (tq) {

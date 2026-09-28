@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-27",
-  "latest": "2026-09-25",
+  "updatedAt": "2026-09-28",
+  "latest": "2026-09-28",
   "dailyExt": ".json.gz",
   "dailyKind": "thin",
   "days": [
-    "2026-09-25"
+    "2026-09-25",
+    "2026-09-28"
   ],
   "archived": []
 }

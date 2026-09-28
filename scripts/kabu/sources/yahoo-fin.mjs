@@ -20,11 +20,29 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 export const NAME = "yahoo-fundamentals";
 
-// 損益（TTM を作りたいので 3 系統とも頼む）。金融業は営業利益が無いことがあるので
-// 税引前利益も一緒に取り、無いときの代用にする（設計書 §4.1「金融業は op := 経常利益」）。
-const FLOW = ["TotalRevenue", "OperatingIncome", "PretaxIncome", "NetIncome"];
+// 損益・キャッシュフロー（TTM を作りたいので 3 系統とも頼む）。
+// 金融業は営業利益が無いことがあるので税引前利益も取り、無いときの代用にする
+// （設計書 §4.1「金融業は op := 経常利益」）。
+//
+// 10 銘柄（超大型〜新規上場）で総当たりした取得率:
+//   10/10  売上・純利益・税引前・営業CF・投資CF・財務CF・FCF・減価償却・株数
+//    9/10  営業利益・EBITDA・EBIT・販管費・配当支払・棚卸・流動資産・流動負債・運転資本・自己株
+//    8/10  粗利・売上原価・有利子負債・設備投資・支払利息・少数株主
+//    7/10  長期借入・販管費
+//    6/10  自社株買い
+//    3/10  研究開発費（開示する会社が限られる。取れた会社だけ効かせる）
+const FLOW = [
+  "TotalRevenue", "CostOfRevenue", "GrossProfit", "OperatingIncome", "PretaxIncome", "NetIncome",
+  "EBITDA", "EBIT", "InterestExpense", "ResearchAndDevelopment", "SellingGeneralAndAdministration",
+  "OperatingCashFlow", "InvestingCashFlow", "FreeCashFlow", "CapitalExpenditure",
+  "DepreciationAndAmortization", "CashDividendsPaid", "RepurchaseOfCapitalStock"
+];
 // 貸借（ある時点の残高。TTM の概念が無いので annual と quarterly だけ）
-const STOCKV = ["TotalAssets", "StockholdersEquity", "CashAndCashEquivalents", "OrdinarySharesNumber"];
+const STOCKV = [
+  "TotalAssets", "StockholdersEquity", "CashAndCashEquivalents", "OrdinarySharesNumber",
+  "CurrentAssets", "CurrentLiabilities", "Inventory", "RetainedEarnings", "TotalDebt",
+  "NetPPE", "GoodwillAndOtherIntangibleAssets", "InvestedCapital", "TreasurySharesNumber"
+];
 
 const TYPES = [
   ...FLOW.flatMap((k) => [`annual${k}`, `quarterly${k}`, `trailing${k}`]),
@@ -159,10 +177,30 @@ export function toTtm(raw, extra = {}) {
   const equityV = equity ? equity.value : 0;
   const sharesV = shares ? shares.value : 0;
   const niV = ni ? ni.value : 0;
+  const salesV = rev.value;
 
-  return {
+  // ── ここから先は「取れたら入れる」項目。取れない銘柄では欠けたまま（0 ではなく未定義）──
+  const v = (x) => (x ? x.value : null);
+  const gross = flow("GrossProfit"), cogs = flow("CostOfRevenue");
+  const ebitda = flow("EBITDA"), ebit = flow("EBIT"), interest = flow("InterestExpense");
+  const rnd = flow("ResearchAndDevelopment"), sga = flow("SellingGeneralAndAdministration");
+  const ocf = flow("OperatingCashFlow"), icf = flow("InvestingCashFlow");
+  const fcf = flow("FreeCashFlow"), capex = flow("CapitalExpenditure");
+  const dep = flow("DepreciationAndAmortization");
+  const divPaid = flow("CashDividendsPaid"), buyback = flow("RepurchaseOfCapitalStock");
+
+  const curA = level("CurrentAssets"), curL = level("CurrentLiabilities");
+  const inv = level("Inventory"), retained = level("RetainedEarnings");
+  const debt = level("TotalDebt"), ppe = level("NetPPE");
+  const goodwill = level("GoodwillAndOtherIntangibleAssets");
+  const invested = level("InvestedCapital"), treasury = level("TreasurySharesNumber");
+
+  const ratio = (a, b) => (a != null && b != null && b !== 0 ? a / b : null);
+  const abs = (x) => (x == null ? null : Math.abs(x));
+
+  const out = {
     fiscalId: rev.date,
-    sales: rev.value,
+    sales: salesV,
     op: op ? op.value : 0,
     ni: niV,
     opIsPretax,
@@ -176,7 +214,34 @@ export function toTtm(raw, extra = {}) {
     div: Number(extra.annualDividend) || 0,
     salesGrowth,
     opmStd: std(margins),
+
+    // 設計書 §18 で足した項目。実在の指標だけを載せる
+    grossMargin: ratio(v(gross), salesV),                          // 粗利率（価格決定力）
+    fcf: v(fcf),
+    fcfMargin: ratio(v(fcf), salesV),                              // 現金を生む力
+    ocf: v(ocf),
+    accrual: ratio(niV - (v(ocf) || 0), assetsV || null),          // 利益と現金のズレ（会計上の質）
+    debt: v(debt),
+    netDebtEbitda: ratio((v(debt) || 0) - (cash ? cash.value : 0), v(ebitda)),  // 借金の重さ
+    interestCover: ratio(v(ebit), abs(v(interest))),               // 利払い余力
+    currentRatio: ratio(v(curA), v(curL)),                         // 短期の安全性
+    invTurnover: ratio(salesV, v(inv)),                            // 在庫回転
+    retainedRatio: ratio(v(retained), assetsV || null),            // 蓄積の厚み
+    goodwillRatio: ratio(v(goodwill), assetsV || null),            // 買収への依存
+    ppeRatio: ratio(v(ppe), assetsV || null),                      // 設備の重さ（装置産業か）
+    capexToDep: ratio(abs(v(capex)), v(dep)),                      // 攻めの投資（1 超で拡大）
+    rndRatio: ratio(v(rnd), salesV),                               // 研究開発の厚み
+    sgaRatio: ratio(v(sga), salesV),                               // 販管費の重さ
+    roic: ratio(v(ebit) != null ? v(ebit) * 0.7 : null, v(invested)),  // 投下資本利益率（税引後概算）
+    payout: ratio(abs(v(divPaid)), niV > 0 ? niV : null),          // 配当性向
+    buyback: ratio(abs(v(buyback)), salesV),                       // 自社株買いの規模
+    treasuryRatio: ratio(v(treasury), sharesV || null),            // 自己株の比率
+
     // どこから採ったか（監査用。素体が急に変わったときに原因を追える）
     sources: Object.assign({ salesGrowth: growthFrom, opmStd: stdFrom }, got)
   };
+
+  // 取れなかった項目は消す（キーが無い＝データが無い、を保つ）
+  for (const k of Object.keys(out)) if (out[k] === null || (typeof out[k] === "number" && !isFinite(out[k]))) delete out[k];
+  return out;
 }

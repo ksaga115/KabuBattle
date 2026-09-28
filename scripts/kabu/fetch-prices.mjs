@@ -484,6 +484,7 @@ async function main() {
   const stocks = {};
   const splitEvents = [];
   const droppedSplits = [];
+  const guessedSplits = [];
   const unusable = [];
   const badMcap = [];
   let staleCount = 0, suspectCount = 0, techCount = 0;
@@ -545,8 +546,27 @@ async function main() {
         `${todaySplit.numerator}:${todaySplit.denominator}（比 ${todaySplit.ratio}）`);
       todaySplit = null;
     }
+    // 取得元が分割イベントを返さないことがある（株価だけ調整済みで、イベントは後日 or 欠落）。
+    // 実測: 2026-09-28 に 32 銘柄が「前日比 −66〜−90%」になったが splits は空だった。
+    // 日本株には値幅制限があるので 1 日で ±60% は原理的にありえない。ぜんぶ分割。
+    // そのための推測が設計書 §8.3 の KB.detectSplit（前日比が 1/n に張り付き、出来高が跳ねる）。
+    if (!todaySplit) {
+      const guess = KB.detectSplit(st.chg1, st.volume, st.avgVolume20);
+      if (guess) {
+        const n = guess.n;
+        todaySplit = guess.kind === "split"
+          ? { date: st.date, ratio: n, numerator: n, denominator: 1, guessed: true }
+          : { date: st.date, ratio: 1 / n, numerator: 1, denominator: n, guessed: true };
+        guessedSplits.push(`${code} ${short} ${todaySplit.numerator}:${todaySplit.denominator}` +
+          `（${st.prevClose} → ${st.close}）`);
+      }
+    }
     if (todaySplit) {
-      splitEvents.push({ code, date: todaySplit.date, ratio: todaySplit.ratio, numerator: todaySplit.numerator, denominator: todaySplit.denominator });
+      splitEvents.push({
+        code, date: todaySplit.date, ratio: todaySplit.ratio,
+        numerator: todaySplit.numerator, denominator: todaySplit.denominator,
+        guessed: !!todaySplit.guessed
+      });
       st.split = todaySplit.ratio;
       // 分割当日は「テンション」「荒れ」の判定を無効化（見かけの急落は実体ではない）
       st.chg1 = 0;
@@ -625,16 +645,33 @@ async function main() {
     if (b.kabu.provisional) s.provisional = true;   // 決算が無い銘柄（キーが無い＝決算あり）
     if (top10.has(code)) s.mcapTop10 = true;
 
-    // 今日のお題（設計書 §16）の判定に要る決算 3 項目。ゲームは銘柄ごとの fin/*.json を
-    // 一括では読まない（3,700 ファイル）ので、ここで 3 つだけ載せておく。
-    // 売上成長率・営業利益率・自己資本比率。1 銘柄 20 バイトほど。
-    for (const k of ["fund"]) delete s[k];
+    // 今日のお題（§16）と図鑑が使う決算の要点。ゲームは銘柄ごとの fin/*.json を
+    // 一括では読まない（3,700 ファイル）ので、判定に要るものだけここに載せる。
+    // 取れなかった項目はキーごと落とす（キーが無い＝データが無い）。1 銘柄 100 バイトほど。
+    delete s.fund;
     if (fin && Number(fin.sales) > 0) {
-      s.fund = {
-        g: round4(Number(fin.salesGrowth) || 0),
-        opm: round4(Number(fin.op) / Number(fin.sales)),
-        eq: round4(Number(fin.eqRatio) || 0)
+      const f = {
+        g: round4(Number(fin.salesGrowth) || 0),          // 売上成長率
+        opm: round4(Number(fin.op) / Number(fin.sales)),  // 営業利益率
+        eq: round4(Number(fin.eqRatio) || 0)              // 自己資本比率
       };
+      const put = (key, v, digits) => {
+        const n = Number(v);
+        if (isFinite(n)) f[key] = digits === 2 ? Math.round(n * 100) / 100 : round4(n);
+      };
+      put("gm", fin.grossMargin);          // 粗利率（価格決定力）
+      put("fcfm", fin.fcfMargin);          // フリーCF マージン
+      put("nde", fin.netDebtEbitda, 2);    // ネットデット / EBITDA
+      put("cr", fin.currentRatio, 2);      // 流動比率
+      put("roic", fin.roic);               // 投下資本利益率
+      put("ppe", fin.ppeRatio);            // 有形固定資産 / 総資産
+      put("bb", fin.buyback);              // 自社株買い / 売上
+      put("ic", fin.interestCover, 2);     // インタレストカバレッジ
+      put("po", fin.payout, 2);            // 配当性向
+      put("gw", fin.goodwillRatio);        // のれん / 総資産
+      put("re", fin.retainedRatio);        // 利益剰余金 / 総資産
+      put("rnd", fin.rndRatio);            // 研究開発費 / 売上
+      s.fund = f;
     }
 
     // 決算発表日（推定）。calendar.json（J-Quants 前提）に届かないので、設計書 §2 の
@@ -679,7 +716,12 @@ async function main() {
 
   console.log(`[prices] 日経平均 ${out.market.nk225}（${(nk225Chg * 100).toFixed(2)}%）` +
     `${out.market.crash ? " 暴落の日" : ""}${out.market.festival ? " 祭りの日" : ""}`);
-  if (splitEvents.length) console.log(`[prices] 分割・併合 ${splitEvents.length} 件: ` + splitEvents.map((s) => `${s.code} ${s.numerator}:${s.denominator}`).join(", "));
+  if (splitEvents.length) console.log(`[prices] 分割・併合 ${splitEvents.length} 件: ` + splitEvents.map((s) => `${s.code} ${s.numerator}:${s.denominator}${s.guessed ? "(推測)" : ""}`).join(", "));
+  if (guessedSplits.length) {
+    console.log(`[prices] 取得元が分割イベントを返さなかったので、前日比と出来高から推測しました ${guessedSplits.length} 件（§8.3）:`);
+    for (const g of guessedSplits.slice(0, 10)) console.log(`    ${g}`);
+    if (guessedSplits.length > 10) console.log(`    …他 ${guessedSplits.length - 10} 件`);
+  }
   if (unusable.length) {
     console.log(`[prices] 1 株 100 万円を超える終値を ${unusable.length} 件弾きました（配信事故）:`);
     for (const u of unusable.slice(0, 10)) console.log(`    ${u}`);

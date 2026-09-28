@@ -175,12 +175,30 @@ const KB = (function () {
   // ══════════════ 特性（設計書 §4.5）══════════════
   // 決算の事実から決定論的に付ける。1 体 1〜2 個。CB の個体は trait ひとつなので、
   // 1 個目を trait（前衛で本発動）、2 個目を traitKeys の 2 番目（隊のオーラ計算で使う）に置く。
+  // 上から順に見て、当たったものを 1〜2 個。珍しくて性格が立つものを先に置く。
+  // CB は 16 種の特性を持っているが、もともと 8 種しか使っていなかった。
+  // 決算からもっと多くの事実を取れるようになった（§18）ので、残りにも意味を与える。
   const TRAIT_RULES = [
-    { key: "calc", test: (f) => f.opm >= 0.25, why: "営業利益率 25% 以上（高付加価値）" },
-    { key: "wall", test: (f) => f.eqRatio >= 0.60, why: "自己資本比率 60% 以上（無借金体質）" },
-    { key: "fang", test: (f) => f.salesGrowth >= 0.15, why: "売上成長率 15% 以上（成長企業）" },
     { key: "curse", test: (f) => f.ni < 0, why: "純利益が赤字（追い詰められた者の逆襲）" },
-    { key: "regen", test: (f) => f.divYield >= 0.035, why: "配当利回り 3.5% 以上（株主還元）" },
+    { key: "calc", test: (f) => f.opm >= 0.25, why: "営業利益率 25% 以上（高付加価値）" },
+    // 粗利率が高い＝価格を自分で決められる。じわじわ相手を削る
+    { key: "venom", test: (f) => f.grossMargin >= 0.50, why: "粗利率 50% 以上（値段を自分で決められる）" },
+    // 装置産業。重い設備で殴るが、動きは鈍い
+    { key: "crush", test: (f) => f.ppeRatio >= 0.45, why: "有形固定資産が総資産の 45% 以上（重い設備）" },
+    // 設備を持たない身軽な商売
+    { key: "gale", test: (f) => f.ppeRatio > 0 && f.ppeRatio <= 0.10 && f.turnover >= 1.0, why: "設備を持たず速く回す（身軽）" },
+    { key: "fang", test: (f) => f.salesGrowth >= 0.15, why: "売上成長率 15% 以上（成長企業）" },
+    // 短期の資金繰りが苦しい＝背水。追い込まれるほど鋭くなる
+    { key: "wrath", test: (f) => f.currentRatio > 0 && f.currentRatio < 1.0, why: "流動比率 1 倍未満（短期の資金繰りが苦しい）" },
+    // 手元が分厚い。受けても跳ね返す
+    { key: "reflect", test: (f) => f.currentRatio >= 3.0, why: "流動比率 3 倍以上（分厚い手元資金）" },
+    // 自社株買い＝買い戻してもう一度。二度打つ
+    { key: "twin", test: (f) => f.buyback >= 0.02, why: "自社株買いが売上の 2% 以上（株主還元）" },
+    // 現金を生む力。配当でも現金でもどちらでも
+    { key: "regen", test: (f) => f.divYield >= 0.035 || f.fcfMargin >= 0.15, why: "配当利回り 3.5% 以上、またはフリーCF が売上の 15% 以上" },
+    // 自己資本比率が高い会社は日本には多い（実測で 6 割以上が 4 割超）。
+    // 「めずらしい特徴」を先に当てて、これは残った会社の受け皿にする。閾値も 7 割に上げた。
+    { key: "wall", test: (f) => f.eqRatio >= 0.70, why: "自己資本比率 70% 以上（無借金体質）" },
     { key: "luck", test: (f) => f.opmStd >= 0.06, why: "直近 4 期の利益のブレが大きい（業績が読めない）" },
     { key: "focus", test: (f) => f.turnover >= 1.5, why: "総資産回転率 1.5 以上（身軽）" },
     { key: "serene", test: (f) => f.mcapTop10, why: "時価総額 上位 10（大御所）" },
@@ -214,7 +232,15 @@ const KB = (function () {
       mcapTop10: !!o.mcapTop10,
       // 気質（§15）。日足 1 年から計算した事実
       mdd: num((s.tech || {}).mdd),
-      recovery: num((s.tech || {}).recovery, 1)
+      recovery: num((s.tech || {}).recovery, 1),
+      // 決算からもっと取れるようになった項目（§18）。決算が無い銘柄では 0 のまま当たらない
+      grossMargin: num(f.grossMargin),
+      fcfMargin: num(f.fcfMargin),
+      ppeRatio: num(f.ppeRatio),
+      currentRatio: num(f.currentRatio),
+      buyback: num(f.buyback),
+      netDebtEbitda: num(f.netDebtEbitda),
+      roic: num(f.roic)
     };
     const notes = [];
     for (const r of TRAIT_RULES) {
@@ -697,7 +723,14 @@ const KB = (function () {
   // 日足の提供元は分割調整済みの系列を出すが、当日〜翌日は未調整で来ることがある。
   // 未調整の日は前日比が 1/n-1（分割）か n-1（併合）に張り付くので、出来高の跳ねと
   // 併せて検出する。検出した日は「テンション」「荒れ」の判定を無効化し、契約中の口数を調整する。
-  const SPLIT_RATIOS = [2, 3, 4, 5, 10];
+  // 実在する分割・併合の比。設計書 §8.3 は 2〜5 と 10 を挙げていたが、実データには
+  // 1:15（東京海上）のようなものもあった。日本株で実際に使われる比を広めに並べる。
+  const SPLIT_RATIOS = [2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 50, 100];
+  // 出来高の下限。§8.3 は「平時の 3 倍以上」としていたが、実測した分割当日の出来高比は
+  // 2.2〜2.8 倍で、3 倍では取りこぼした（32 件中 4 件）。日本株には値幅制限があり
+  // 1 日で ±60% は原理的に起きないので、比が一致した時点でほぼ分割と断定できる。
+  // 出来高は「念のため」の二の矢なので 1.5 倍に緩める。
+  const SPLIT_VOL_MIN = 1.5;
 
   /**
    * @param {number} chg1     前日比（close/prevClose - 1）
@@ -709,7 +742,7 @@ const KB = (function () {
   function detectSplit(chg1, volume, avgVolume, tol) {
     const c = num(chg1), v = num(volume), av = num(avgVolume);
     const eps = num(tol, 0.02) || 0.02;
-    if (!(av > 0) || !(v >= av * 3)) return null;   // 出来高が平時の 3 倍以上でなければ見送る
+    if (!(av > 0) || !(v >= av * SPLIT_VOL_MIN)) return null;
     for (const n of SPLIT_RATIOS) {
       if (Math.abs(c - (1 / n - 1)) <= eps) return { kind: "split", n: n };
       if (Math.abs(c - (n - 1)) <= eps) return { kind: "merge", n: n };
@@ -834,6 +867,47 @@ const KB = (function () {
       key: "turnaround", name: "再生", need: "3 割超下げて高値圏の 9 割まで戻した",
       why: "一度沈んで立て直した会社に賭ける",
       test: (s) => s.tech && num(s.tech.mdd) <= -0.30 && num(s.tech.recovery) >= 0.90
+    },
+    // ここから §18 で決算をもっと取れるようになって足せたもの
+    {
+      key: "moat", name: "価格決定力", need: "粗利率 50% 以上",
+      why: "値段を自分で決められる会社。堀があるかどうか",
+      test: (s) => s.fund && num(s.fund.gm) >= 0.50
+    },
+    {
+      key: "cashcow", name: "現金製造機", need: "フリーCF が売上の 15% 以上",
+      why: "利益ではなく、手元に残る現金で選ぶ",
+      test: (s) => s.fund && num(s.fund.fcfm) >= 0.15
+    },
+    {
+      key: "debtfree", name: "実質無借金", need: "借金より現金が多い",
+      why: "借りずに回している会社だけで組む",
+      test: (s) => s.fund && s.fund.nde != null && num(s.fund.nde) <= 0
+    },
+    {
+      key: "roic", name: "資本効率", need: "ROIC 12% 以上",
+      why: "預けた資本をどれだけ増やせているか",
+      test: (s) => s.fund && num(s.fund.roic) >= 0.12
+    },
+    {
+      key: "asset", name: "装置産業", need: "有形固定資産が総資産の 45% 以上",
+      why: "重い設備を抱えて戦う会社を集める",
+      test: (s) => s.fund && num(s.fund.ppe) >= 0.45
+    },
+    {
+      key: "asset_light", name: "アセットライト", need: "有形固定資産が総資産の 10% 以下",
+      why: "設備を持たずに稼ぐ会社を集める",
+      test: (s) => s.fund && num(s.fund.ppe) > 0 && num(s.fund.ppe) <= 0.10
+    },
+    {
+      key: "shareholder", name: "株主還元", need: "自社株買いが売上の 2% 以上",
+      why: "配当だけでなく、買い戻しで報いる会社",
+      test: (s) => s.fund && num(s.fund.bb) >= 0.02
+    },
+    {
+      key: "liquidsafe", name: "手元が厚い", need: "流動比率 3 倍以上",
+      why: "短期の支払いに 3 倍の備えがある会社",
+      test: (s) => s.fund && num(s.fund.cr) >= 3.0
     }
   ];
 
@@ -909,7 +983,8 @@ const KB = (function () {
     // 状態
     stateMods: stateMods, applyMods: applyMods, MOD_LO: MOD_LO, MOD_HI: MOD_HI,
     // 分割・併合
-    SPLIT_RATIOS: SPLIT_RATIOS, detectSplit: detectSplit, adjustHolding: adjustHolding,
+    SPLIT_RATIOS: SPLIT_RATIOS, SPLIT_VOL_MIN: SPLIT_VOL_MIN,
+    detectSplit: detectSplit, adjustHolding: adjustHolding,
     // 対戦
     protagonists: protagonists, MIN_MCAP: MIN_MCAP, scaleToParty: scaleToParty, squadOf: squadOf,
     // ポートフォリオ・練度（§15）

@@ -246,7 +246,10 @@ section("7. 株式分割・併合（§8.3）");
   ok(JSON.stringify(KB.detectSplit(1 / 2 - 1, 3e6, 1e6)) === '{"kind":"split","n":2}', "1/2 に張り付いた日を 2 分割として検出");
   ok(KB.detectSplit(1 / 10 - 1, 5e6, 1e6).n === 10, "1/10 も検出する");
   ok(KB.detectSplit(2 - 1, 4e6, 1e6).kind === "merge", "n-1 は併合として検出");
-  ok(KB.detectSplit(1 / 2 - 1, 1.2e6, 1e6) === null, "出来高が平時の 3 倍未満なら分割と見なさない");
+  // 出来高の下限は実測（分割当日は 2.2〜2.8 倍）に合わせて 1.5 倍
+  ok(KB.detectSplit(1 / 2 - 1, 1.2e6, 1e6) === null, `出来高が平時の ${KB.SPLIT_VOL_MIN} 倍未満なら分割と見なさない`);
+  ok(KB.detectSplit(1 / 2 - 1, 2.2e6, 1e6) !== null, "出来高が平時の 2.2 倍でも検出する（実測の分割当日）");
+  ok(KB.detectSplit(1 / 15 - 1, 9e6, 1e6) !== null, "1/15 のような珍しい比も検出する（実データにあった）");
   ok(KB.detectSplit(-0.08, 5e6, 1e6) === null, "ただの急落を分割と誤検出しない");
   ok(KB.detectSplit(1 / 3 - 1 + 0.015, 5e6, 1e6) !== null && KB.detectSplit(1 / 3 - 1 + 0.05, 5e6, 1e6) === null,
     "許容誤差は ±2%");

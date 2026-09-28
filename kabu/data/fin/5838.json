@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "5838",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-26",
+ "updatedAt": "2026-09-28",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 166632000000,
@@ -19,6 +19,18 @@
   "div": 0,
   "salesGrowth": 0.34882102008272686,
   "opmStd": 0.05333508976944913,
+  "fcf": 335403000000,
+  "fcfMargin": 2.0128366700273657,
+  "ocf": 354295000000,
+  "accrual": -0.01694917092967941,
+  "debt": 2840727000000,
+  "retainedRatio": 0.02079322021108912,
+  "goodwillRatio": 0.0024641187010306506,
+  "ppeRatio": 0.00030357749534282467,
+  "capexToDep": 2.391392405063291,
+  "sgaRatio": 0.3416750684142302,
+  "buyback": 0,
+  "treasuryRatio": 8.252194585189571e-7,
   "sources": {
    "salesGrowth": "年次の前年比",
    "opmStd": "年次",
@@ -28,7 +40,21 @@
    "TotalAssets": "quarterly",
    "StockholdersEquity": "quarterly",
    "CashAndCashEquivalents": "quarterly",
-   "OrdinarySharesNumber": "quarterly"
+   "OrdinarySharesNumber": "quarterly",
+   "InterestExpense": "trailing",
+   "SellingGeneralAndAdministration": "trailing",
+   "OperatingCashFlow": "trailing",
+   "InvestingCashFlow": "trailing",
+   "FreeCashFlow": "trailing",
+   "CapitalExpenditure": "trailing",
+   "DepreciationAndAmortization": "trailing",
+   "RepurchaseOfCapitalStock": "trailing",
+   "RetainedEarnings": "quarterly",
+   "TotalDebt": "quarterly",
+   "NetPPE": "quarterly",
+   "GoodwillAndOtherIntangibleAssets": "quarterly",
+   "InvestedCapital": "quarterly",
+   "TreasurySharesNumber": "quarterly"
   }
  }
 }

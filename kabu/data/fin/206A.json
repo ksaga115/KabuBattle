@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "206A",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-26",
+ "updatedAt": "2026-09-28",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 711865000,
@@ -19,6 +19,16 @@
   "div": 0,
   "salesGrowth": 1.2162489365879194,
   "opmStd": 1.6809727148246218,
+  "grossMargin": 0.42141557739178076,
+  "fcf": -1320387000,
+  "fcfMargin": -1.8548278114530143,
+  "ocf": -1234355000,
+  "accrual": 0.10506529535151228,
+  "netDebtEbitda": 2.7311163086728563,
+  "currentRatio": 5.648886784146846,
+  "retainedRatio": -1.1521150667452853,
+  "ppeRatio": 0,
+  "roic": -0.29538353473242157,
   "sources": {
    "salesGrowth": "年次の前年比",
    "opmStd": "年次",
@@ -28,7 +38,21 @@
    "TotalAssets": "quarterly",
    "StockholdersEquity": "quarterly",
    "CashAndCashEquivalents": "quarterly",
-   "OrdinarySharesNumber": "quarterly"
+   "OrdinarySharesNumber": "quarterly",
+   "GrossProfit": "trailing",
+   "CostOfRevenue": "trailing",
+   "EBITDA": "trailing",
+   "EBIT": "trailing",
+   "OperatingCashFlow": "trailing",
+   "InvestingCashFlow": "trailing",
+   "FreeCashFlow": "trailing",
+   "CapitalExpenditure": "trailing",
+   "DepreciationAndAmortization": "annual",
+   "CurrentAssets": "quarterly",
+   "CurrentLiabilities": "quarterly",
+   "RetainedEarnings": "quarterly",
+   "NetPPE": "quarterly",
+   "InvestedCapital": "quarterly"
   }
  }
 }

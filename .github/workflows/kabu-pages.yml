@@ -1,0 +1,51 @@
+# GitHub Pages に公開する。https://ksaga115.github.io/KabuBattle/
+#
+# データを更新するワークフロー（kabu-daily / kabu-weekly）が push すると、ここが動いて
+# 公開ページも一緒に新しくなる。つまり「平日の引け後に勝手に今日の相場に入れ替わる」。
+#
+# configure-pages の enablement: true が、リポジトリ設定の Pages を自動で有効にする
+# （公開リポジトリなら無料。手で設定画面を開かなくてよい）。
+name: kabu-pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 公開は 1 本ずつ。走っている途中に次が来たら、古いほうは取りやめる
+# （データのワークフローとは別グループにして、取得の邪魔をしない）
+concurrency:
+  group: kabu-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # リポジトリまるごと。index.html が入口で、ゲームは kabu/*.json を読みに行く。
+      # 決算は銘柄ごとの kabu/data/fin/<code>.json を図鑑カードを開いたときだけ取りに行くので、
+      # それも一緒に置く必要がある（3,700 ファイル。Pages の容量には十分収まる）。
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 公開先
+        run: echo "公開しました → ${{ steps.deploy.outputs.page_url }}"

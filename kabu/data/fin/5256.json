@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "5256",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 2407050000,
@@ -24,8 +24,8 @@
   "fcfMargin": 0.029212106104983277,
   "ocf": 85564000,
   "accrual": -0.01858782848729765,
-  "debt": 23351000,
-  "netDebtEbitda": -5.184257775208668,
+  "debt": 43349000,
+  "netDebtEbitda": -5.009108664617217,
   "currentRatio": 3.258968396575415,
   "invTurnover": 44.13770972769781,
   "retainedRatio": 0.46192119865860654,
@@ -59,7 +59,7 @@
    "CurrentLiabilities": "quarterly",
    "Inventory": "quarterly",
    "RetainedEarnings": "quarterly",
-   "TotalDebt": "quarterly",
+   "TotalDebt": "annual",
    "NetPPE": "quarterly",
    "InvestedCapital": "quarterly",
    "TreasurySharesNumber": "quarterly"

@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "3350",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 11733000000,
@@ -59,7 +59,7 @@
    "RepurchaseOfCapitalStock": "trailing",
    "CurrentAssets": "quarterly",
    "CurrentLiabilities": "quarterly",
-   "Inventory": "quarterly",
+   "Inventory": "annual",
    "RetainedEarnings": "quarterly",
    "TotalDebt": "quarterly",
    "NetPPE": "quarterly",

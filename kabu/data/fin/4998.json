@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "4998",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 77366000000,
@@ -53,7 +53,7 @@
    "EBITDA": "trailing",
    "EBIT": "trailing",
    "InterestExpense": "trailing",
-   "SellingGeneralAndAdministration": "trailing",
+   "SellingGeneralAndAdministration": "annual",
    "OperatingCashFlow": "trailing",
    "InvestingCashFlow": "trailing",
    "FreeCashFlow": "trailing",

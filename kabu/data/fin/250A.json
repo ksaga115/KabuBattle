@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "250A",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 41061218000,
@@ -16,7 +16,7 @@
   "shares": 14304998,
   "eps": 181.4752438273672,
   "bps": 1290.6112255311045,
-  "div": 52,
+  "div": 53,
   "salesGrowth": 0.036241954158076295,
   "opmStd": 0.010183046660796438,
   "grossMargin": 0.2998832134010248,

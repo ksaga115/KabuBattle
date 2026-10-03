@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "7575",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 59187000000,
@@ -16,7 +16,7 @@
   "shares": 70154478,
   "eps": 133.27730839932983,
   "bps": 939.2700491620792,
-  "div": 54,
+  "div": 79,
   "salesGrowth": 0.04552199258081613,
   "opmStd": 0.0030312433260973374,
   "grossMargin": 0.5942859073783094,
@@ -38,7 +38,7 @@
   "roic": 0.1262857225920865,
   "payout": 0.3983957219251337,
   "buyback": 0,
-  "treasuryRatio": 0.01632856565478258,
+  "treasuryRatio": 0.08070285976612926,
   "sources": {
    "salesGrowth": "年次の前年比",
    "opmStd": "年次",

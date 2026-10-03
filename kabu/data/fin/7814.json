@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "7814",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 92497000000,
@@ -16,7 +16,7 @@
   "shares": 46817035,
   "eps": 122.0923110572893,
   "bps": 423.62785255409705,
-  "div": 60.5,
+  "div": 37.75,
   "salesGrowth": 0.08598002496878898,
   "opmStd": 0.007381364127406101,
   "grossMargin": 0.31444263057180233,

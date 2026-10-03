@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "334A",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 1512205000,
@@ -59,7 +59,7 @@
    "CurrentLiabilities": "quarterly",
    "Inventory": "quarterly",
    "RetainedEarnings": "quarterly",
-   "TotalDebt": "quarterly",
+   "TotalDebt": "annual",
    "NetPPE": "quarterly",
    "GoodwillAndOtherIntangibleAssets": "quarterly",
    "InvestedCapital": "quarterly"

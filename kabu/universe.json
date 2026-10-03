@@ -1,6 +1,6 @@
 {
  "schemaVersion": 1,
- "updatedAt": "2026-09-26",
+ "updatedAt": "2026-10-03",
  "jpxAsOf": "2026-08-31",
  "stocks": {
   "1301": {"name":"極洋","short":"極洋","sector33":"水産・農林業","elem":4,"indices":["prime","small1"],"listed":true,"addedAt":"2026-09-26","delistedAt":null,"renamedFrom":[]},

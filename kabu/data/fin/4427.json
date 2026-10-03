@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "4427",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 6168807000,
@@ -56,7 +56,6 @@
    "FreeCashFlow": "trailing",
    "CapitalExpenditure": "trailing",
    "DepreciationAndAmortization": "trailing",
-   "CashDividendsPaid": "annual",
    "RepurchaseOfCapitalStock": "annual",
    "CurrentAssets": "quarterly",
    "CurrentLiabilities": "quarterly",

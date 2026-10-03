@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "7012",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 2311267000000,
@@ -16,7 +16,7 @@
   "shares": 835848060,
   "eps": 129.397919521402,
   "bps": 1050.5749095116641,
-  "div": 34.2,
+  "div": 39.2,
   "salesGrowth": 0.0854478963012153,
   "opmStd": 0.014628422590266518,
   "grossMargin": 0.19682581025904838,
@@ -66,7 +66,7 @@
    "Inventory": "quarterly",
    "RetainedEarnings": "quarterly",
    "TotalDebt": "annual",
-   "NetPPE": "quarterly",
+   "NetPPE": "annual",
    "GoodwillAndOtherIntangibleAssets": "quarterly",
    "InvestedCapital": "quarterly",
    "TreasurySharesNumber": "quarterly"

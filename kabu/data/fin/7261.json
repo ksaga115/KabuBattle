@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "7261",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-03",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 4918172000000,
@@ -64,7 +64,7 @@
    "TotalDebt": "quarterly",
    "NetPPE": "quarterly",
    "GoodwillAndOtherIntangibleAssets": "quarterly",
-   "InvestedCapital": "quarterly",
+   "InvestedCapital": "annual",
    "TreasurySharesNumber": "quarterly"
   }
  }

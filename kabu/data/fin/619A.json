@@ -1,0 +1,38 @@
+{
+ "schemaVersion": 1,
+ "code": "619A",
+ "source": "yahoo-fundamentals",
+ "updatedAt": "2026-10-11",
+ "ttm": {
+  "fiscalId": "2021-07-31",
+  "sales": 25462528000,
+  "op": 1952314000,
+  "ni": 1595397000,
+  "opIsPretax": false,
+  "assets": 0,
+  "equity": 0,
+  "eqRatio": 0,
+  "cash": 0,
+  "shares": 0,
+  "eps": 0,
+  "bps": 0,
+  "div": 0,
+  "salesGrowth": 0,
+  "opmStd": 0,
+  "grossMargin": 0.27198925416989234,
+  "netDebtEbitda": 0,
+  "interestCover": 379.5364051293197,
+  "sources": {
+   "salesGrowth": "none",
+   "opmStd": "none",
+   "TotalRevenue": "trailing",
+   "OperatingIncome": "trailing",
+   "NetIncome": "trailing",
+   "GrossProfit": "trailing",
+   "CostOfRevenue": "trailing",
+   "EBITDA": "trailing",
+   "EBIT": "trailing",
+   "InterestExpense": "trailing"
+  }
+ }
+}

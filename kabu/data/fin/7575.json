@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "7575",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-10-03",
+ "updatedAt": "2026-10-24",
  "ttm": {
   "fiscalId": "2026-03-31",
   "sales": 59187000000,
@@ -38,7 +38,7 @@
   "roic": 0.1262857225920865,
   "payout": 0.3983957219251337,
   "buyback": 0,
-  "treasuryRatio": 0.08070285976612926,
+  "treasuryRatio": 0.01632856565478258,
   "sources": {
    "salesGrowth": "年次の前年比",
    "opmStd": "年次",

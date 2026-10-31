@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "1381",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-10-24",
+ "updatedAt": "2026-10-31",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 29244000000,
@@ -34,7 +34,7 @@
   "ppeRatio": 0.38361266294227186,
   "capexToDep": 0.8380165289256198,
   "roic": 0.11878910944428328,
-  "payout": 0.013333333333333334,
+  "payout": 0.21572649572649572,
   "buyback": 0,
   "treasuryRatio": 0.0003258738494249128,
   "sources": {

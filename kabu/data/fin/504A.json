@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "504A",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-31",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 16609000,
@@ -37,7 +37,7 @@
   "roic": -0.15316469210293826,
   "sources": {
    "salesGrowth": "none",
-   "opmStd": "年次",
+   "opmStd": "四半期",
    "TotalRevenue": "trailing",
    "OperatingIncome": "trailing",
    "NetIncome": "trailing",

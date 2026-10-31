@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "5031",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-31",
  "ttm": {
   "fiscalId": "2026-07-31",
   "sales": 6564098000,
@@ -18,7 +18,7 @@
   "bps": 174.20540509326096,
   "div": 0,
   "salesGrowth": 0.014507437702896198,
-  "opmStd": 0.013391729699187315,
+  "opmStd": 0.008681168705744797,
   "grossMargin": 0.48793634708074135,
   "fcf": -15255000,
   "fcfMargin": -0.0023240055221600896,
@@ -35,7 +35,7 @@
   "treasuryRatio": 0,
   "sources": {
    "salesGrowth": "年次の前年比",
-   "opmStd": "年次",
+   "opmStd": "四半期",
    "TotalRevenue": "trailing",
    "OperatingIncome": "trailing",
    "NetIncome": "trailing",

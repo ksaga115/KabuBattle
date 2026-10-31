@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "5618",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-09-28",
+ "updatedAt": "2026-10-31",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 7282317000,
@@ -17,8 +17,8 @@
   "eps": -16.420321431918282,
   "bps": 39.8001593102802,
   "div": 0,
-  "salesGrowth": 0.23149528785656703,
-  "opmStd": 0.11072282322984336,
+  "salesGrowth": 0.12052730359748631,
+  "opmStd": 0.028114654124206898,
   "grossMargin": 0.3486438450839204,
   "fcf": -104848000,
   "fcfMargin": -0.014397615484192737,
@@ -36,8 +36,8 @@
   "roic": -0.024843524220455174,
   "treasuryRatio": 0,
   "sources": {
-   "salesGrowth": "年次の前年比",
-   "opmStd": "年次",
+   "salesGrowth": "前年同期比",
+   "opmStd": "四半期",
    "TotalRevenue": "trailing",
    "OperatingIncome": "trailing",
    "NetIncome": "trailing",
@@ -63,7 +63,7 @@
    "NetPPE": "quarterly",
    "GoodwillAndOtherIntangibleAssets": "quarterly",
    "InvestedCapital": "quarterly",
-   "TreasurySharesNumber": "annual"
+   "TreasurySharesNumber": "quarterly"
   }
  }
 }

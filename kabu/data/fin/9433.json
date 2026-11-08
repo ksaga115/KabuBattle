@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "9433",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-10-31",
+ "updatedAt": "2026-11-08",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 6143497000000,
@@ -18,7 +18,7 @@
   "bps": 1346.6355426190137,
   "div": 82,
   "salesGrowth": 0.04050878027255478,
-  "opmStd": 0.01952221963789972,
+  "opmStd": 0.019435183588556563,
   "grossMargin": 0.4276456877898695,
   "fcf": 663849000000,
   "fcfMargin": 0.10805718632238284,

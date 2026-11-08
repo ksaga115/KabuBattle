@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "6578",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-10-31",
+ "updatedAt": "2026-11-08",
  "ttm": {
   "fiscalId": "2026-08-31",
   "sales": 6682249000,
@@ -13,9 +13,9 @@
   "equity": 908858000,
   "eqRatio": 0.28202998984036903,
   "cash": 1687138000,
-  "shares": 7348900,
-  "eps": -4.286355781137313,
-  "bps": 123.67265849310782,
+  "shares": 7422400,
+  "eps": -4.243910325501186,
+  "bps": 122.44799525759862,
   "div": 9,
   "salesGrowth": 0.02578065862674639,
   "opmStd": 0.029712740157395487,
@@ -64,7 +64,7 @@
    "NetPPE": "quarterly",
    "GoodwillAndOtherIntangibleAssets": "quarterly",
    "InvestedCapital": "quarterly",
-   "TreasurySharesNumber": "annual"
+   "TreasurySharesNumber": "quarterly"
   }
  }
 }

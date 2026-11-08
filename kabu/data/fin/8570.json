@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "8570",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-10-31",
+ "updatedAt": "2026-11-08",
  "ttm": {
   "fiscalId": "2026-08-31",
   "sales": 491554000000,
@@ -31,7 +31,7 @@
   "sgaRatio": 0.9213718126594433,
   "payout": 0.5107817313272914,
   "buyback": 0.002608055269614325,
-  "treasuryRatio": 0.0005600882019064861,
+  "treasuryRatio": 0.0005834242453181229,
   "sources": {
    "salesGrowth": "前年同期比",
    "opmStd": "四半期",

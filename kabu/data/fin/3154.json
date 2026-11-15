@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "code": "3154",
  "source": "yahoo-fundamentals",
- "updatedAt": "2026-10-31",
+ "updatedAt": "2026-11-15",
  "ttm": {
   "fiscalId": "2026-06-30",
   "sales": 302336775000,
@@ -31,7 +31,7 @@
   "invTurnover": 21.09353611642048,
   "retainedRatio": 0.13060484801153846,
   "goodwillRatio": 0.014991562556669048,
-  "ppeRatio": 0.11453021334055168,
+  "ppeRatio": 0.11344009825556896,
   "capexToDep": 0.4254159627837784,
   "sgaRatio": 0.009344218876449945,
   "roic": 0.04191421930365958,
